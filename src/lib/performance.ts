@@ -219,12 +219,8 @@ export class BundleOptimizer {
   static async loadComponent(componentName: string) {
     try {
       switch (componentName) {
-        case 'DataManagement':
-          return (await import('@/app/components/DataManagement')).default;
         case 'RequestDetail':
           return (await import('@/app/components/RequestDetail')).default;
-        case 'RequestHistory':
-          return (await import('@/app/components/RequestHistory')).default;
         default:
           throw new Error(`Unknown component: ${componentName}`);
       }
