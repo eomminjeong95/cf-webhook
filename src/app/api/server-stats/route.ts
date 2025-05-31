@@ -1,6 +1,6 @@
 // Server statistics API route - provides global cache distribution data
 
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { webhookCache } from '@/lib/cache';
 
 // Calculate global cache statistics
@@ -22,7 +22,7 @@ function getGlobalCacheStats() {
   return stats;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     const stats = getGlobalCacheStats();
     
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-export async function OPTIONS(_request: NextRequest) {
+export async function OPTIONS() {
   return new NextResponse(null, {
     status: 200,
     headers: {

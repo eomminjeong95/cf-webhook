@@ -100,6 +100,7 @@ class WebhookCache {
 
 // Export singleton instance with global fallback for development
 declare global {
+  // eslint-disable-next-line no-var
   var __webhookCache: WebhookCache | undefined;
 }
 

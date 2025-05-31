@@ -314,7 +314,7 @@ const getServerCacheMetrics = async (): Promise<MetricGroup[]> => {
       },
       {
         name: '🌐 Server Cache Distribution (Global)',
-        metrics: distribution.length > 0 ? distribution.map((item: any) => ({
+        metrics: distribution.length > 0 ? distribution.map((item: { webhookId: string; requestCount: number; percentage: number; lastActivity: string }) => ({
           key: item.webhookId,
           value: `${item.requestCount} requests (${item.percentage}%) - last: ${new Date(item.lastActivity).toLocaleTimeString()}`
         })) : [{ key: 'No Data', value: 'No webhook requests cached on server' }]
@@ -412,8 +412,8 @@ const getWebhookRuntimeMetrics = (): MetricGroup[] => {
         { key: 'Current Time', value: now.toLocaleString() },
         { key: 'User Agent', value: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A' },
         { key: 'Page Load Time', value: typeof performance !== 'undefined' ? `${Math.round(Date.now() - performance.timeOrigin)}ms` : 'N/A' },
-        { key: 'Memory Usage', value: typeof (performance as any)?.memory !== 'undefined' ? 
-          `${Math.round((performance as any).memory.usedJSHeapSize / 1024 / 1024)}MB` : 'N/A' },
+        { key: 'Memory Usage', value: typeof (performance as unknown as { memory?: { usedJSHeapSize: number } })?.memory !== 'undefined' ? 
+          `${Math.round(((performance as unknown as { memory: { usedJSHeapSize: number } }).memory.usedJSHeapSize / 1024 / 1024))}MB` : 'N/A' },
       ]
     }
   ];
@@ -594,7 +594,7 @@ export default function InspectPage() {
       <hr />
       <p><small>
         <strong>Note:</strong> This page displays real client-side webhook information for debugging and monitoring purposes. 
-        All metrics are based on actual data from your browser's local storage and real API calls.
+        All metrics are based on actual data from your browser&apos;s local storage and real API calls.
         Connection status is checked every 10 seconds with actual API polling.
         No simulated or fake data is shown.
         Refresh the browser page to update the metrics.
