@@ -8,14 +8,27 @@
 		"start": "next start",
 		"lint": "next lint",
 		"deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
+		"deploy:preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
+		"deploy:prod": "./scripts/deploy.sh",
+		"deploy:staging": "./scripts/deploy.sh --preview",
+		"deploy:dry-run": "./scripts/deploy.sh --dry-run",
 		"preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts"
+		"cf-typegen": "wrangler types --env-interface CloudflareEnv ./cloudflare-env.d.ts",
+		"logs": "wrangler tail cf-webhook",
+		"logs:preview": "wrangler tail cf-webhook --env preview",
+		"dev:remote": "wrangler dev",
+		"clean": "rm -rf .next .open-next dist",
+		"type-check": "tsc --noEmit",
+		"format": "prettier --write .",
+		"format:check": "prettier --check ."
 	},
 	"dependencies": {
 		"@opennextjs/cloudflare": "^1.0.2",
+		"clsx": "^2.1.1",
 		"next": "15.3.2",
 		"react": "^19.0.0",
-		"react-dom": "^19.0.0"
+		"react-dom": "^19.0.0",
+		"tailwind-merge": "^3.3.0"
 	},
 	"devDependencies": {
 		"@eslint/eslintrc": "^3",
@@ -25,6 +38,7 @@
 		"@types/react-dom": "^19",
 		"eslint": "^9",
 		"eslint-config-next": "15.3.2",
+		"prettier": "^3.4.1",
 		"tailwindcss": "^4",
 		"typescript": "^5",
 		"wrangler": "^4.18.0"
