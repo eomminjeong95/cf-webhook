@@ -27,12 +27,7 @@
 		"mode": "smart" 
 	},
 
-	/**
-	 * Resource limits for production
-	 */
-	"limits": {
-		"cpu_ms": 50
-	},
+
 
 	/**
 	 * Environment Variables for CF-Webhook
