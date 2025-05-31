@@ -2,29 +2,10 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateId } from '@/lib/utils';
+import { webhookCache } from '@/lib/cache';
 import type { WebhookRequest } from '@/types/webhook';
 
-// In-memory storage for temporary request data
-// In production, this would be stored in a database or cache
-const requestCache = new Map<string, WebhookRequest[]>();
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
-const MAX_REQUESTS_PER_WEBHOOK = 100;
 
-// Clean up expired requests periodically
-function cleanupExpiredRequests() {
-  const now = Date.now();
-  for (const [webhookId, requests] of requestCache.entries()) {
-    const validRequests = requests.filter(req => 
-      now - new Date(req.timestamp).getTime() < CACHE_TTL
-    );
-    
-    if (validRequests.length === 0) {
-      requestCache.delete(webhookId);
-    } else if (validRequests.length !== requests.length) {
-      requestCache.set(webhookId, validRequests);
-    }
-  }
-}
 
 // Helper function to extract client IP
 function getClientIP(request: NextRequest): string {
@@ -129,21 +110,8 @@ async function handleRequest(request: NextRequest, context: { params: Promise<{ 
       bodySize,
     };
 
-    // Store request in memory cache
-    const existingRequests = requestCache.get(webhookId) || [];
-    existingRequests.unshift(webhookRequest); // Add to beginning
-    
-    // Limit number of requests per webhook
-    if (existingRequests.length > MAX_REQUESTS_PER_WEBHOOK) {
-      existingRequests.splice(MAX_REQUESTS_PER_WEBHOOK);
-    }
-    
-    requestCache.set(webhookId, existingRequests);
-    
-    // Clean up expired requests periodically (1 in 10 chance)
-    if (Math.random() < 0.1) {
-      cleanupExpiredRequests();
-    }
+    // Store request in shared cache
+    webhookCache.addRequest(webhookId, webhookRequest);
 
     console.log(`Webhook ${webhookId} received ${method} request from ${ip}`);
 
@@ -246,6 +214,10 @@ export async function OPTIONS(_request: NextRequest, _context: { params: Promise
 
 // Export function to get cached requests (for polling)
 export function getCachedRequests(webhookId: string): WebhookRequest[] {
-  cleanupExpiredRequests();
-  return requestCache.get(webhookId) || [];
+  return webhookCache.getRequests(webhookId);
+}
+
+// Export function to get all cache statistics
+export function getAllCacheStats() {
+  return webhookCache.getAllStats();
 } 
