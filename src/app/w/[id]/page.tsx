@@ -6,12 +6,11 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useWebhooks } from '@/hooks/useLocalStorage';
 import { usePolling } from '@/hooks/usePolling';
-import Layout, { PageContainer, Card, Button } from '@/app/components/Layout';
+import { PageContainer, Card } from '@/app/components/Layout';
 import WebhookHeader from '@/app/components/WebhookHeader';
 import Footer from '@/app/components/Footer';
-import WebhookInfo from '@/app/components/WebhookInfo';
 import RequestDetail from '@/app/components/RequestDetail';
-import { formatRelativeTime, copyToClipboard, generateWebhookUrl, getMethodColor, getContentTypeName, formatBytes } from '@/lib/utils';
+import { formatRelativeTime, getMethodColor, formatBytes } from '@/lib/utils';
 import type { WebhookRequest } from '@/types/webhook';
 
 export default function WebhookMonitorPage() {
@@ -20,7 +19,7 @@ export default function WebhookMonitorPage() {
   
   const { getWebhook } = useWebhooks();
   const [webhook, setWebhook] = useState(getWebhook(webhookId));
-  const [lastNotification, setLastNotification] = useState<Date | null>(null);
+  const [, setLastNotification] = useState<Date | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<WebhookRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('');
@@ -54,7 +53,6 @@ export default function WebhookMonitorPage() {
     requests,
     loading,
     error,
-    lastUpdate,
     isConnected,
     requestCount,
     pausePolling,
@@ -83,7 +81,7 @@ export default function WebhookMonitorPage() {
     if (currentWebhook && (!webhook || webhook.id !== currentWebhook.id)) {
       setWebhook(currentWebhook);
     }
-  }, [webhookId, getWebhook]); // Removed 'requests' from dependencies
+  }, [webhookId, getWebhook, webhook]);
 
   // Auto-select first request when requests load and no request is selected
   useEffect(() => {
@@ -100,8 +98,7 @@ export default function WebhookMonitorPage() {
     setInterval(newInterval);
   };
 
-  // Generate webhook URL if webhook not found in storage
-  const webhookUrl = webhook?.url || generateWebhookUrl('', webhookId);
+
 
   // Filter requests based on search and method
   const filteredRequests = requests.filter((request: WebhookRequest) => {

@@ -156,7 +156,7 @@ export function validateConfig(): { isValid: boolean; errors: string[] } {
 }
 
 // Debug information
-export function getConfigInfo(): Record<string, any> {
+export function getConfigInfo(): Record<string, unknown> {
   return {
     ...config,
     validation: validateConfig(),

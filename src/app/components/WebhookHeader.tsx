@@ -17,7 +17,7 @@ import {
 } from '@/lib/utils';
 
 import { ThemeToggle } from './ThemeProvider';
-import type { WebhookConfig, ExportData } from '@/types/webhook';
+import type { WebhookConfig, ExportData, WebhookRequest } from '@/types/webhook';
 
 interface WebhookHeaderProps {
   currentWebhookId?: string;
@@ -256,15 +256,15 @@ export default function WebhookHeader({ currentWebhookId }: WebhookHeaderProps) 
       const data = await exportData();
       if (data && data.requests && typeof data.requests === 'object') {
         // Flatten all requests from all webhooks into a single array
-        const allRequests: any[] = [];
-        Object.entries(data.requests).forEach(([webhookId, requests]) => {
+        const allRequests: WebhookRequest[] = [];
+        Object.entries(data.requests).forEach(([, requests]) => {
           if (Array.isArray(requests)) {
             allRequests.push(...requests);
           }
         });
 
         if (allRequests.length > 0) {
-          const csvData = allRequests.map((req: any) => ({
+          const csvData = allRequests.map((req: WebhookRequest) => ({
             webhookId: req.webhookId,
             method: req.method,
             path: req.path,

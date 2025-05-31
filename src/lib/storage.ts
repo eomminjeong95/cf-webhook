@@ -3,13 +3,11 @@
 import type { 
   WebhookConfig, 
   WebhookRequest, 
-  StorageData, 
   AppSettings, 
   ExportData 
 } from '@/types/webhook';
 import { DEFAULT_SETTINGS } from '@/types/webhook';
 import { config } from './config';
-import { safeJsonParse, safeJsonStringify, generateId } from './utils';
 
 // Storage keys
 const STORAGE_KEYS = {
@@ -57,7 +55,7 @@ function isLocalStorageAvailable(): boolean {
     localStorage.setItem(test, test);
     localStorage.removeItem(test);
     return true;
-  } catch (e) {
+  } catch {
     return false;
   }
 }

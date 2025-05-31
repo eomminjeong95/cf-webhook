@@ -2,7 +2,7 @@
 
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from '@/app/components/ThemeProvider';
 
@@ -29,105 +29,108 @@ export function useKeyboardShortcuts({
   const router = useRouter();
   const { toggleTheme } = useTheme();
 
-  // Default global shortcuts
-  const defaultShortcuts: KeyboardShortcut[] = [
-    {
-      key: 'h',
-      altKey: true,
-      action: () => router.push('/'),
-      description: 'Go to Home',
-      category: 'Navigation',
-    },
-    {
-      key: 'd',
-      ctrlKey: true,
-      action: (event?: KeyboardEvent) => {
-        event?.preventDefault();
-        toggleTheme();
-      },
-      description: 'Toggle Dark Mode',
-      category: 'Interface',
-    },
-    {
-      key: 'k',
-      ctrlKey: true,
-      action: (event?: KeyboardEvent) => {
-        event?.preventDefault();
-        // Focus search input if available
-        const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
-        if (searchInput) {
-          searchInput.focus();
-          searchInput.select();
-        }
-      },
-      description: 'Focus Search',
-      category: 'Navigation',
-    },
-    {
-      key: 'n',
-      ctrlKey: true,
-      shiftKey: true,
-      action: (event?: KeyboardEvent) => {
-        event?.preventDefault();
-        // Trigger new webhook creation
-        const createButton = document.querySelector('[data-create-webhook]') as HTMLButtonElement;
-        if (createButton) {
-          createButton.click();
-        }
-      },
-      description: 'Create New Webhook',
-      category: 'Actions',
-    },
-    {
-      key: 'r',
-      ctrlKey: true,
-      shiftKey: true,
-      action: (event?: KeyboardEvent) => {
-        event?.preventDefault();
-        // Trigger refresh action
-        const refreshButton = document.querySelector('[data-refresh]') as HTMLButtonElement;
-        if (refreshButton) {
-          refreshButton.click();
-        } else {
-          window.location.reload();
-        }
-      },
-      description: 'Refresh Data',
-      category: 'Actions',
-    },
-    {
-      key: 'Escape',
-      action: () => {
-        // Close any open modals or dropdowns
-        const closeButtons = document.querySelectorAll('[data-close], [aria-label="Close"]');
-        if (closeButtons.length > 0) {
-          const lastButton = closeButtons[closeButtons.length - 1] as HTMLButtonElement;
-          lastButton.click();
-        }
-        
-        // Remove focus from active element
-        if (document.activeElement && document.activeElement !== document.body) {
-          (document.activeElement as HTMLElement).blur();
-        }
-      },
-      description: 'Close Modal/Clear Focus',
-      category: 'Interface',
-    },
-    {
-      key: '?',
-      shiftKey: true,
-      action: () => {
-        showShortcutsHelp();
-      },
-      description: 'Show Keyboard Shortcuts',
-      category: 'Help',
-    },
-  ];
-
   // Combine default and custom shortcuts
-  const allShortcuts = enableGlobalShortcuts 
-    ? [...defaultShortcuts, ...shortcuts]
-    : shortcuts;
+  const allShortcuts = useMemo(() => {
+    // Default global shortcuts
+    const defaultShortcuts: KeyboardShortcut[] = [
+      {
+        key: 'h',
+        altKey: true,
+        action: () => router.push('/'),
+        description: 'Go to Home',
+        category: 'Navigation',
+      },
+      {
+        key: 'd',
+        ctrlKey: true,
+        action: (event?: KeyboardEvent) => {
+          event?.preventDefault();
+          toggleTheme();
+        },
+        description: 'Toggle Dark Mode',
+        category: 'Interface',
+      },
+      {
+        key: 'k',
+        ctrlKey: true,
+        action: (event?: KeyboardEvent) => {
+          event?.preventDefault();
+          // Focus search input if available
+          const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+          if (searchInput) {
+            searchInput.focus();
+            searchInput.select();
+          }
+        },
+        description: 'Focus Search',
+        category: 'Navigation',
+      },
+      {
+        key: 'n',
+        ctrlKey: true,
+        shiftKey: true,
+        action: (event?: KeyboardEvent) => {
+          event?.preventDefault();
+          // Trigger new webhook creation
+          const createButton = document.querySelector('[data-create-webhook]') as HTMLButtonElement;
+          if (createButton) {
+            createButton.click();
+          }
+        },
+        description: 'Create New Webhook',
+        category: 'Actions',
+      },
+      {
+        key: 'r',
+        ctrlKey: true,
+        shiftKey: true,
+        action: (event?: KeyboardEvent) => {
+          event?.preventDefault();
+          // Trigger refresh action
+          const refreshButton = document.querySelector('[data-refresh]') as HTMLButtonElement;
+          if (refreshButton) {
+            refreshButton.click();
+          } else {
+            window.location.reload();
+          }
+        },
+        description: 'Refresh Data',
+        category: 'Actions',
+      },
+      {
+        key: 'Escape',
+        action: () => {
+          // Close any open modals or dropdowns
+          const closeButtons = document.querySelectorAll('[data-close], [aria-label="Close"]');
+          if (closeButtons.length > 0) {
+            const lastButton = closeButtons[closeButtons.length - 1] as HTMLButtonElement;
+            lastButton.click();
+          }
+          
+          // Remove focus from active element
+          if (document.activeElement && document.activeElement !== document.body) {
+            (document.activeElement as HTMLElement).blur();
+          }
+        },
+        description: 'Close Modal/Clear Focus',
+        category: 'Interface',
+      },
+      {
+        key: '?',
+        shiftKey: true,
+        action: () => {
+          showShortcutsHelp();
+        },
+        description: 'Show Keyboard Shortcuts',
+        category: 'Help',
+      },
+    ];
+
+    return enableGlobalShortcuts 
+      ? [...defaultShortcuts, ...shortcuts]
+      : shortcuts;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enableGlobalShortcuts, shortcuts, router, toggleTheme]);
 
   // Handle keyboard events
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
@@ -160,7 +163,7 @@ export function useKeyboardShortcuts({
       event.preventDefault();
       matchingShortcut.action(event);
     }
-  }, [allShortcuts, router, toggleTheme]);
+  }, [allShortcuts]);
 
   // Show shortcuts help modal
   const showShortcutsHelp = useCallback(() => {

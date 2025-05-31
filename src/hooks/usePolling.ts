@@ -191,7 +191,7 @@ export function usePolling(
     } finally {
       setLoading(false);
     }
-  }, [webhookId, loading, enabled, isPaused]);
+  }, [webhookId, loading, enabled, isPaused, currentInterval]);
 
   // Pause polling
   const pausePolling = useCallback(() => {
@@ -389,6 +389,7 @@ export function usePolling(
         abortControllerRef.current = null;
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [webhookId, currentInterval, enabled, isPaused]);
 
   // Cleanup on unmount

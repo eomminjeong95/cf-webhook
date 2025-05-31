@@ -2,7 +2,7 @@
 
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
-import type { WebhookRequest, HttpMethod } from '@/types/webhook';
+import type { HttpMethod } from '@/types/webhook';
 
 /**
  * Tailwind CSS class name merge utility
@@ -118,7 +118,7 @@ export async function copyToClipboard(text: string): Promise<boolean> {
 /**
  * Debounce function
  */
-export function debounce<T extends (...args: any[]) => any>(
+export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
@@ -132,7 +132,7 @@ export function debounce<T extends (...args: any[]) => any>(
 /**
  * Throttle function
  */
-export function throttle<T extends (...args: any[]) => any>(
+export function throttle<T extends (...args: unknown[]) => unknown>(
   func: T,
   limit: number
 ): (...args: Parameters<T>) => void {
@@ -168,7 +168,7 @@ export function deepClone<T>(obj: T): T {
 /**
  * Safe JSON parse
  */
-export function safeJsonParse<T = any>(str: string, fallback: T): T {
+export function safeJsonParse<T = unknown>(str: string, fallback: T): T {
   try {
     return JSON.parse(str);
   } catch {
@@ -179,7 +179,7 @@ export function safeJsonParse<T = any>(str: string, fallback: T): T {
 /**
  * Safe JSON stringify
  */
-export function safeJsonStringify(obj: any, fallback: string = '{}'): string {
+export function safeJsonStringify(obj: unknown, fallback: string = '{}'): string {
   try {
     return JSON.stringify(obj, null, 2);
   } catch {
@@ -398,7 +398,7 @@ export function createCancelToken() {
 /**
  * Export data to JSON file
  */
-export function exportToJson(data: any, filename: string): void {
+export function exportToJson(data: unknown, filename: string): void {
   const json = JSON.stringify(data, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
   downloadBlob(blob, `${filename}.json`);
@@ -407,7 +407,7 @@ export function exportToJson(data: any, filename: string): void {
 /**
  * Export data to CSV file
  */
-export function exportToCsv(data: any[], filename: string, headers?: string[]): void {
+export function exportToCsv(data: Record<string, unknown>[], filename: string, headers?: string[]): void {
   if (!data || data.length === 0) {
     console.warn('No data to export');
     return;
@@ -454,14 +454,14 @@ function downloadBlob(blob: Blob, filename: string): void {
 /**
  * Import data from JSON file
  */
-export function importFromJson<T = any>(file: File): Promise<T> {
+export function importFromJson<T = unknown>(file: File): Promise<T> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string);
         resolve(data);
-      } catch (error) {
+      } catch {
         reject(new Error('Invalid JSON file'));
       }
     };
@@ -494,7 +494,7 @@ export function calculateStorageUsage(): {
   try {
     // Estimate localStorage usage
     let used = 0;
-    for (let key in localStorage) {
+    for (const key in localStorage) {
       if (localStorage.hasOwnProperty(key)) {
         used += localStorage[key].length + key.length;
       }

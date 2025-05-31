@@ -5,7 +5,7 @@ import { WebhookRequest, WebhookConfig } from '@/types/webhook';
 // Memory optimization utilities
 export class MemoryOptimizer {
   private static instance: MemoryOptimizer;
-  private cacheMap = new Map<string, { data: any; timestamp: number; size: number }>();
+  private cacheMap = new Map<string, { data: unknown; timestamp: number; size: number }>();
   private maxMemoryUsage = 10 * 1024 * 1024; // 10MB limit
   private currentMemoryUsage = 0;
 
@@ -17,13 +17,13 @@ export class MemoryOptimizer {
   }
 
   // Calculate object size in bytes
-  private calculateSize(obj: any): number {
+  private calculateSize(obj: unknown): number {
     const str = JSON.stringify(obj);
     return new Blob([str]).size;
   }
 
   // Set cache with memory management
-  set(key: string, data: any, ttl: number = 30 * 60 * 1000): boolean {
+  set(key: string, data: unknown, ttl: number = 30 * 60 * 1000): boolean {
     const size = this.calculateSize(data);
     
     // Check if adding this would exceed memory limit
@@ -55,7 +55,7 @@ export class MemoryOptimizer {
   }
 
   // Get from cache
-  get(key: string): any | null {
+  get<T = unknown>(key: string): T | null {
     const entry = this.cacheMap.get(key);
     if (!entry) return null;
 
@@ -65,7 +65,7 @@ export class MemoryOptimizer {
       return null;
     }
 
-    return entry.data;
+    return entry.data as T;
   }
 
   // Delete from cache
@@ -176,7 +176,7 @@ export class CacheManager {
   // Get cached requests
   static getCachedRequests(webhookId: string): Partial<WebhookRequest>[] | null {
     const cacheKey = `requests:${webhookId}`;
-    return this.memoryOptimizer.get(cacheKey);
+    return this.memoryOptimizer.get<Partial<WebhookRequest>[]>(cacheKey);
   }
 
   // Cache webhook configs
@@ -187,19 +187,19 @@ export class CacheManager {
 
   // Get cached configs
   static getCachedConfigs(): WebhookConfig[] | null {
-    return this.memoryOptimizer.get('webhooks:configs');
+    return this.memoryOptimizer.get<WebhookConfig[]>('webhooks:configs');
   }
 
   // Cache search results
-  static cacheSearchResults(query: string, results: any[]): void {
+  static cacheSearchResults(query: string, results: unknown[]): void {
     const cacheKey = `search:${query}`;
     this.memoryOptimizer.set(cacheKey, results, 2 * 60 * 1000); // 2 minutes
   }
 
   // Get cached search results
-  static getCachedSearchResults(query: string): any[] | null {
+  static getCachedSearchResults(query: string): unknown[] | null {
     const cacheKey = `search:${query}`;
-    return this.memoryOptimizer.get(cacheKey);
+    return this.memoryOptimizer.get<unknown[]>(cacheKey);
   }
 
   // Clear all caches
@@ -298,9 +298,9 @@ export class PerformanceMonitor {
   }
 
   // Get memory usage (if supported)
-  static getMemoryUsage(): any {
+  static getMemoryUsage(): unknown {
     if ('memory' in performance) {
-      return (performance as any).memory;
+      return (performance as unknown as { memory: unknown }).memory;
     }
     return null;
   }
@@ -308,11 +308,11 @@ export class PerformanceMonitor {
 
 // Debounced localStorage operations
 export class OptimizedStorage {
-  private static writeQueue = new Map<string, any>();
+  private static writeQueue = new Map<string, unknown>();
   private static writeTimeout: NodeJS.Timeout | null = null;
 
   // Debounced write to localStorage
-  static setItem(key: string, value: any, immediate = false): void {
+  static setItem(key: string, value: unknown, immediate = false): void {
     this.writeQueue.set(key, value);
 
     if (immediate) {
@@ -350,7 +350,7 @@ export class OptimizedStorage {
   // Read from localStorage with caching
   static getItem<T>(key: string): T | null {
     const cacheKey = `storage:${key}`;
-    let cached = MemoryOptimizer.getInstance().get(cacheKey);
+    let cached = MemoryOptimizer.getInstance().get<T>(cacheKey);
     
     if (cached === null) {
       try {

@@ -49,7 +49,7 @@ async function parseRequestBody(request: NextRequest): Promise<string> {
       return JSON.stringify(json, null, 2);
     } else if (contentType.includes('application/x-www-form-urlencoded')) {
       const formData = await request.formData();
-      const formObject: Record<string, any> = {};
+      const formObject: Record<string, string | File> = {};
       for (const [key, value] of formData.entries()) {
         formObject[key] = value;
       }
@@ -230,7 +230,8 @@ export async function HEAD(request: NextRequest, context: { params: Promise<{ id
   return handleRequest(request, context);
 }
 
-export async function OPTIONS(request: NextRequest, context: { params: Promise<{ id: string }> }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export async function OPTIONS(_request: NextRequest, _context: { params: Promise<{ id: string }> }) {
   // Handle CORS preflight
   return new NextResponse(null, {
     status: 200,
