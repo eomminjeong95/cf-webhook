@@ -92,6 +92,7 @@ jobs:
     - name: Sync with upstream
       # This step only runs if the check_changes step determined there are changes.
       if: steps.check_changes.outputs.has_changes == 'true'
+      id: sync
       run: |
         echo "Attempting to sync fork's '${{ env.FORK_BRANCH_NAME }}' with 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'..."
         # Ensure the local branch is checked out (should be already by actions/checkout with 'ref' parameter)
@@ -102,20 +103,29 @@ jobs:
           echo "Successfully fast-forwarded '${{ env.FORK_BRANCH_NAME }}' to 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
           echo "sync_method=fast-forward" >> $GITHUB_OUTPUT
         else
-          # If fast-forward fails, it means the fork has diverged or there are other issues.
-          echo "Fast-forward merge failed."
-          if [ "${{ github.event.inputs.force_sync }}" = "true" ]; then
-            echo "'force_sync' is enabled. Resetting '${{ env.FORK_BRANCH_NAME }}' to 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
-            echo "WARNING: This will discard any unique commits on your fork's '${{ env.FORK_BRANCH_NAME }}' branch!"
-            git reset --hard upstream/${{ env.UPSTREAM_BRANCH_NAME }}
-            echo "sync_method=force-reset" >> $GITHUB_OUTPUT
+          # If fast-forward fails, try a regular merge to handle diverged branches
+          echo "Fast-forward merge failed. Attempting regular merge..."
+          if git merge --no-ff upstream/${{ env.UPSTREAM_BRANCH_NAME }} --message "Merge upstream/${{ env.UPSTREAM_BRANCH_NAME }} into ${{ env.FORK_BRANCH_NAME }}"; then
+            echo "Successfully merged 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}' into '${{ env.FORK_BRANCH_NAME }}'."
+            echo "sync_method=merge" >> $GITHUB_OUTPUT
           else
-            echo "::error::Fast-forward merge failed and 'force_sync' is disabled."
-            echo "Your fork's '${{ env.FORK_BRANCH_NAME }}' branch has likely diverged from 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
-            echo "Manual intervention is required to resolve conflicts or rebase your changes."
-            echo "To force sync (discarding your local changes on this branch if they conflict), re-run this workflow with the 'Force sync' option enabled."
-            echo "sync_method=failed" >> $GITHUB_OUTPUT
-            exit 1 # Exit with an error code to indicate failure.
+            # If regular merge also fails, it means there are conflicts
+            echo "Regular merge failed due to conflicts."
+            if [ "${{ github.event.inputs.force_sync }}" = "true" ]; then
+              echo "'force_sync' is enabled. Resetting '${{ env.FORK_BRANCH_NAME }}' to 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
+              echo "WARNING: This will discard any unique commits on your fork's '${{ env.FORK_BRANCH_NAME }}' branch!"
+              git merge --abort || true  # Clean up any partial merge state
+              git reset --hard upstream/${{ env.UPSTREAM_BRANCH_NAME }}
+              echo "sync_method=force-reset" >> $GITHUB_OUTPUT
+            else
+              echo "::error::Merge failed due to conflicts and 'force_sync' is disabled."
+              echo "Your fork's '${{ env.FORK_BRANCH_NAME }}' branch has conflicts with 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
+              echo "Manual intervention is required to resolve conflicts."
+              echo "To force sync (discarding your local changes on this branch), re-run this workflow with the 'Force sync' option enabled."
+              git merge --abort || true  # Clean up any partial merge state
+              echo "sync_method=failed" >> $GITHUB_OUTPUT
+              exit 1 # Exit with an error code to indicate failure.
+            fi
           fi
         fi
 
@@ -168,6 +178,11 @@ jobs:
             echo "### ✅ Sync Status: Completed (Fast-Forward)" >> $GITHUB_STEP_SUMMARY
             echo "✅ Fork's \`${{ env.FORK_BRANCH_NAME }}\` branch has been successfully fast-forwarded to match \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\`." >> $GITHUB_STEP_SUMMARY
             echo "📊 Synced **${{ steps.check_changes.outputs.behind_count }}** commits from upstream." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.sync.outputs.sync_method }}" = "merge" ]; then
+            echo "### ✅ Sync Status: Completed (Merge)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Fork's \`${{ env.FORK_BRANCH_NAME }}\` branch has been successfully merged with \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\`." >> $GITHUB_STEP_SUMMARY
+            echo "📊 Synced **${{ steps.check_changes.outputs.behind_count }}** commits from upstream." >> $GITHUB_STEP_SUMMARY
+            echo "🔀 A merge commit was created to combine diverged branches." >> $GITHUB_STEP_SUMMARY
           else
             # This case should ideally not be reached if logic is correct, but as a fallback:
             echo "### ⚠️ Sync Status: Unknown Outcome" >> $GITHUB_STEP_SUMMARY
