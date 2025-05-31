@@ -28,6 +28,15 @@ Your webhook service will be live at: `https://your-app-name.your-subdomain.work
 
 No complex setup, no local environment required - just click and go! 🎉
 
+## 🔄 Fork Sync for Developers
+
+If you've forked this repository, we've included an automatic sync system to keep your fork up to date:
+
+- **🔄 Auto Sync**: Daily automatic sync at 2 AM UTC
+- **🖱️ Manual Trigger**: Run sync anytime from GitHub Actions
+- **⚡ Smart Merge**: Uses fast-forward merge when possible
+- **🛡️ Conflict Handling**: Option to force sync or preserve local changes
+
 ## ✨ Key Features
 
 - **🚀 Real-time Webhook Reception** - Supports all HTTP methods (GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS)

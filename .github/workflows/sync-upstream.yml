@@ -1,0 +1,180 @@
+name: Sync Fork with Upstream
+
+on:
+  schedule:
+    - cron: '0 2 * * *' # Runs at 2 AM UTC daily
+
+  workflow_dispatch:
+    inputs:
+      force_sync:
+        description: 'Force sync even if there are conflicts'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    # Define the upstream repository URL as an environment variable at the job level
+    env:
+      UPSTREAM_REPO_URL: https://github.com/yingca1/cf-webhook.git # Modify this URL if your upstream changes
+      # Define the upstream branch name. Common names are 'main', 'master', 'develop'.
+      # Ensure this matches the primary branch of your upstream repository.
+      UPSTREAM_BRANCH_NAME: main 
+      # Define the branch in your fork that you want to sync.
+      # This is typically the same as the upstream branch, e.g., 'main' or 'master'.
+      FORK_BRANCH_NAME: main
+
+
+    steps:
+    - name: Checkout fork
+      uses: actions/checkout@v4
+      with:
+        # The token is used to push changes back to your fork.
+        # GITHUB_TOKEN has permissions to push to the repository where the action is running.
+        token: ${{ secrets.GITHUB_TOKEN }}
+        # Fetch all history for all branches and tags.
+        # This is important for a reliable merge or rebase.
+        fetch-depth: 0
+        # Explicitly checkout the branch you intend to sync in your fork.
+        ref: ${{ env.FORK_BRANCH_NAME }}
+
+    - name: Configure Git
+      run: |
+        # Configure Git user for commits made by this action (if any, though this workflow primarily merges/resets).
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+    - name: Add upstream remote
+      run: |
+        # Add the upstream repository as a remote.
+        # The URL is taken from the environment variable defined above.
+        echo "Adding upstream remote 'upstream' with URL: ${{ env.UPSTREAM_REPO_URL }}"
+        git remote add upstream ${{ env.UPSTREAM_REPO_URL }}
+        # Fetch all branches and tags from the upstream remote.
+        echo "Fetching from upstream..."
+        git fetch upstream --tags --prune # --prune removes any remote-tracking references that no longer exist on the remote
+
+    - name: Check for upstream changes
+      id: check_changes
+      run: |
+        echo "Checking for changes between local ${{ env.FORK_BRANCH_NAME }} and upstream/${{ env.UPSTREAM_BRANCH_NAME }}..."
+        
+        # Verify that the upstream branch actually exists
+        if ! git show-ref --verify --quiet refs/remotes/upstream/${{ env.UPSTREAM_BRANCH_NAME }}; then
+          echo "::error::Upstream branch 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}' not found."
+          echo "Please check the UPSTREAM_REPO_URL and UPSTREAM_BRANCH_NAME environment variables in the workflow file."
+          # Setting has_changes to false and behind_count to 0 to prevent sync attempts on non-existent branch
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "behind_count=0" >> $GITHUB_OUTPUT
+          # Optionally, exit the workflow if the upstream branch is critical and not found
+          # exit 1 
+          # For now, we'll let it continue and report "Already up to date" if upstream branch is missing.
+          # The summary will still indicate an issue if this path is taken.
+          echo "status_message=Upstream branch 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}' not found." >> $GITHUB_OUTPUT
+          exit 0 # Exit step successfully to allow summary to report this
+        fi
+
+        # Count how many commits the local FORK_BRANCH_NAME is behind upstream/UPSTREAM_BRANCH_NAME
+        BEHIND_COUNT=$(git rev-list --count ${{ env.FORK_BRANCH_NAME }}..upstream/${{ env.UPSTREAM_BRANCH_NAME }})
+        echo "Fork's '${{ env.FORK_BRANCH_NAME }}' branch is $BEHIND_COUNT commits behind upstream/${{ env.UPSTREAM_BRANCH_NAME }}"
+        echo "behind_count=$BEHIND_COUNT" >> $GITHUB_OUTPUT
+        
+        if [ "$BEHIND_COUNT" -gt 0 ]; then
+          echo "has_changes=true" >> $GITHUB_OUTPUT
+          echo "status_message=Fork is $BEHIND_COUNT commits behind upstream." >> $GITHUB_OUTPUT
+        else
+          echo "has_changes=false" >> $GITHUB_OUTPUT
+          echo "Fork is up to date with upstream/${{ env.UPSTREAM_BRANCH_NAME }}"
+          echo "status_message=Fork is already up to date with upstream." >> $GITHUB_OUTPUT
+        fi
+
+    - name: Sync with upstream
+      # This step only runs if the check_changes step determined there are changes.
+      if: steps.check_changes.outputs.has_changes == 'true'
+      run: |
+        echo "Attempting to sync fork's '${{ env.FORK_BRANCH_NAME }}' with 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'..."
+        # Ensure the local branch is checked out (should be already by actions/checkout with 'ref' parameter)
+        git checkout ${{ env.FORK_BRANCH_NAME }}
+
+        # Try a fast-forward merge first. This is the cleanest way if there are no diverging commits.
+        if git merge --ff-only upstream/${{ env.UPSTREAM_BRANCH_NAME }}; then
+          echo "Successfully fast-forwarded '${{ env.FORK_BRANCH_NAME }}' to 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
+          echo "sync_method=fast-forward" >> $GITHUB_OUTPUT
+        else
+          # If fast-forward fails, it means the fork has diverged or there are other issues.
+          echo "Fast-forward merge failed."
+          if [ "${{ github.event.inputs.force_sync }}" = "true" ]; then
+            echo "'force_sync' is enabled. Resetting '${{ env.FORK_BRANCH_NAME }}' to 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
+            echo "WARNING: This will discard any unique commits on your fork's '${{ env.FORK_BRANCH_NAME }}' branch!"
+            git reset --hard upstream/${{ env.UPSTREAM_BRANCH_NAME }}
+            echo "sync_method=force-reset" >> $GITHUB_OUTPUT
+          else
+            echo "::error::Fast-forward merge failed and 'force_sync' is disabled."
+            echo "Your fork's '${{ env.FORK_BRANCH_NAME }}' branch has likely diverged from 'upstream/${{ env.UPSTREAM_BRANCH_NAME }}'."
+            echo "Manual intervention is required to resolve conflicts or rebase your changes."
+            echo "To force sync (discarding your local changes on this branch if they conflict), re-run this workflow with the 'Force sync' option enabled."
+            echo "sync_method=failed" >> $GITHUB_OUTPUT
+            exit 1 # Exit with an error code to indicate failure.
+          fi
+        fi
+
+    - name: Push changes
+      # This step only runs if there were changes and the sync was successful (or forced).
+      # It checks if sync_method output exists and is not 'failed'.
+      if: steps.check_changes.outputs.has_changes == 'true' && steps.sync.outputs.sync_method != 'failed'
+      run: |
+        echo "Pushing changes to origin/${{ env.FORK_BRANCH_NAME }}..."
+        # If force_sync was used and resulted in a reset, a force push is necessary.
+        # The sync_method output from the previous step helps determine this.
+        if [ "${{ steps.sync.outputs.sync_method }}" = "force-reset" ]; then
+          echo "Force pushing changes to origin/${{ env.FORK_BRANCH_NAME }} due to reset."
+          git push origin ${{ env.FORK_BRANCH_NAME }} --force
+        else
+          # For a successful fast-forward merge, a regular push is sufficient.
+          git push origin ${{ env.FORK_BRANCH_NAME }}
+        fi
+        echo "Changes pushed successfully."
+
+    - name: Create summary
+      # This step always runs to provide feedback.
+      run: |
+        echo "## 🍴 Fork Sync Summary" >> $GITHUB_STEP_SUMMARY
+        echo "---" >> $GITHUB_STEP_SUMMARY
+        echo "- **Fork Branch:** `${{ env.FORK_BRANCH_NAME }}`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Upstream Repository:** `${{ env.UPSTREAM_REPO_URL }}`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Upstream Branch:** `${{ env.UPSTREAM_BRANCH_NAME }}`" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+
+        # Check if the upstream branch was found
+        if [[ "${{ steps.check_changes.outputs.status_message }}" == *"Upstream branch"* && "${{ steps.check_changes.outputs.status_message }}" == *"not found"* ]]; then
+          echo "### ⚠️ Sync Status: Upstream Branch Not Found" >> $GITHUB_STEP_SUMMARY
+          echo "**Error:** The specified upstream branch \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\` could not be found." >> $GITHUB_STEP_SUMMARY
+          echo "Please verify the \`UPSTREAM_REPO_URL\` and \`UPSTREAM_BRANCH_NAME\` environment variables in your workflow file." >> $GITHUB_STEP_SUMMARY
+          exit 0 # Exit successfully as this is a configuration issue reported.
+        fi
+        
+        if [ "${{ steps.check_changes.outputs.has_changes }}" = "true" ]; then
+          if [ "${{ steps.sync.outputs.sync_method }}" = "failed" ]; then
+            echo "### ❌ Sync Status: Failed" >> $GITHUB_STEP_SUMMARY
+            echo "**Error:** Synchronization failed. Fast-forward merge was not possible, and 'force_sync' was not enabled or did not resolve the issue." >> $GITHUB_STEP_SUMMARY
+            echo "Your fork's \`${{ env.FORK_BRANCH_NAME }}\` branch has likely diverged. Manual intervention is required." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.sync.outputs.sync_method }}" = "force-reset" ]; then
+            echo "### 🔄 Sync Status: Completed (Forced)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Fork's \`${{ env.FORK_BRANCH_NAME }}\` branch was **force-reset** to match \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\`." >> $GITHUB_STEP_SUMMARY
+            echo "📊 Synced **${{ steps.check_changes.outputs.behind_count }}** commits from upstream." >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ **Warning:** Any unique commits on your fork's \`${{ env.FORK_BRANCH_NAME }}\` branch that were not on upstream may have been lost." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.sync.outputs.sync_method }}" = "fast-forward" ]; then
+            echo "### ✅ Sync Status: Completed (Fast-Forward)" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Fork's \`${{ env.FORK_BRANCH_NAME }}\` branch has been successfully fast-forwarded to match \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\`." >> $GITHUB_STEP_SUMMARY
+            echo "📊 Synced **${{ steps.check_changes.outputs.behind_count }}** commits from upstream." >> $GITHUB_STEP_SUMMARY
+          else
+            # This case should ideally not be reached if logic is correct, but as a fallback:
+            echo "### ⚠️ Sync Status: Unknown Outcome" >> $GITHUB_STEP_SUMMARY
+            echo "Synchronization was attempted for **${{ steps.check_changes.outputs.behind_count }}** commits, but the exact method (\`fast-forward\` or \`force-reset\`) could not be determined from step outputs." >> $GITHUB_STEP_SUMMARY
+            echo "Please check the logs for more details." >> $GITHUB_STEP_SUMMARY
+          fi
+        else
+          echo "### ✨ Sync Status: Already Up to Date" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Your fork's \`${{ env.FORK_BRANCH_NAME }}\` branch is already up to date with \`upstream/${{ env.UPSTREAM_BRANCH_NAME }}\`." >> $GITHUB_STEP_SUMMARY
+        fi
