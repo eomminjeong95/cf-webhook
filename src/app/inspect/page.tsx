@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getWebhookStorage } from '@/lib/storage';
+import { getWebhookStorage } from '@/lib/browser-storage';
 import { config } from '@/lib/config';
 import { formatBytes, formatRelativeTime } from '@/lib/utils';
 import type { WebhookConfig, WebhookRequest } from '@/types/webhook';
@@ -271,24 +271,71 @@ const getServerCacheMetrics = async (): Promise<MetricGroup[]> => {
     const data = await response.json() as {
       success: boolean;
       error?: string;
-      data?: {
-        globalStats: {
+      timestamp?: string;
+      storage?: {
+        provider: string;
+        name: string;
+        instance: string;
+        health: string;
+        details: Record<string, any>;
+        distribution?: {
           totalWebhooks: number;
           totalRequests: number;
-          serverUptime: string;
-          nodeVersion: string;
-          memoryUsage?: {
-            rss: number;
-            heapUsed: number;
-            heapTotal: number;
+          webhooksWithRequests: number;
+          webhookDistribution: Array<{
+            webhookId: string;
+            webhookName?: string;
+            requestCount: number;
+            totalSize: number;
+            averageSize: number;
+            lastRequestAt?: string;
+            isActive: boolean;
+            percentage: number;
+          }>;
+          requestMethodDistribution: Array<{
+            method: string;
+            count: number;
+            percentage: number;
+            totalSize: number;
+          }>;
+          requestSizeDistribution: Array<{
+            sizeRange: string;
+            count: number;
+            percentage: number;
+            minSize: number;
+            maxSize: number;
+          }>;
+          timeDistribution: Array<{
+            period: string;
+            count: number;
+            percentage: number;
+            timeRange: string;
+          }>;
+          storageUsage: {
+            totalSizeBytes: number;
+            averageRequestSize: number;
+            largestRequestSize: number;
+          };
+          performance: {
+            totalOperations: number;
+            uptime: number;
           };
         };
-        distribution: Array<{
-          webhookId: string;
-          requestCount: number;
-          percentage: number;
-          lastActivity: string;
-        }>;
+      };
+      storageError?: string;
+      server?: {
+        uptime: number | string;
+        nodeVersion: string;
+        platform: string;
+        memoryUsage?: {
+          rss: number;
+          heapUsed: number;
+          heapTotal: number;
+        };
+      };
+      environment?: {
+        nodeEnv: string;
+        isProduction: boolean;
       };
     };
     
@@ -296,30 +343,144 @@ const getServerCacheMetrics = async (): Promise<MetricGroup[]> => {
       throw new Error(data.error || 'Failed to fetch server stats');
     }
     
-    const { globalStats, distribution } = data.data!;
-    
-    return [
+    const serverMetrics: MetricItem[] = [
+      { key: 'Server Status', value: '✅ Running' },
+      { key: 'Timestamp', value: data.timestamp ? new Date(data.timestamp).toLocaleString() : 'N/A' }
+    ];
+
+    if (data.server) {
+      const uptime = typeof data.server.uptime === 'number' 
+        ? `${Math.floor(data.server.uptime / 60)}m ${Math.floor(data.server.uptime % 60)}s`
+        : data.server.uptime;
+      
+      serverMetrics.push(
+        { key: 'Server Uptime', value: uptime },
+        { key: 'Node.js Version', value: data.server.nodeVersion },
+        { key: 'Platform', value: data.server.platform }
+      );
+
+      if (data.server.memoryUsage) {
+        serverMetrics.push(
+          { key: 'Memory (RSS)', value: `${data.server.memoryUsage.rss}MB` },
+          { key: 'Heap Used', value: `${data.server.memoryUsage.heapUsed}MB` },
+          { key: 'Heap Total', value: `${data.server.memoryUsage.heapTotal}MB` }
+        );
+      }
+    }
+
+    if (data.environment) {
+      serverMetrics.push(
+        { key: 'Environment', value: data.environment.nodeEnv },
+        { key: 'Production Mode', value: data.environment.isProduction ? 'Yes' : 'No' }
+      );
+    }
+
+    const storageMetrics: MetricItem[] = [];
+    if (data.storage) {
+      storageMetrics.push(
+        { key: 'Storage Provider', value: data.storage.provider },
+        { key: 'Storage Name', value: data.storage.name },
+        { key: 'Storage Instance', value: data.storage.instance },
+        { key: 'Storage Health', value: data.storage.health === 'healthy' ? '✅ Healthy' : '❌ Unhealthy' }
+      );
+      
+      // Add any additional storage details
+      if (data.storage.details && Object.keys(data.storage.details).length > 0) {
+        Object.entries(data.storage.details).forEach(([key, value]) => {
+          storageMetrics.push({
+            key: `Storage ${key}`,
+            value: String(value)
+          });
+        });
+      }
+    } else if (data.storageError) {
+      storageMetrics.push({
+        key: 'Storage Error',
+        value: data.storageError
+      });
+    } else {
+      storageMetrics.push({
+        key: 'Storage Status',
+        value: 'Not available'
+      });
+    }
+
+    const resultMetrics = [
       {
         name: '🌐 Server Cache Analysis (Global)',
-        metrics: [
-          { key: 'Server Status', value: '✅ Running' },
-          { key: 'Total Webhooks (Server)', value: globalStats.totalWebhooks.toString() },
-          { key: 'Total Requests (Server)', value: globalStats.totalRequests.toString() },
-          { key: 'Server Uptime', value: globalStats.serverUptime },
-          { key: 'Node.js Version', value: globalStats.nodeVersion },
-          { key: 'Memory (RSS)', value: globalStats.memoryUsage ? `${globalStats.memoryUsage.rss}MB` : 'N/A' },
-          { key: 'Heap Used', value: globalStats.memoryUsage ? `${globalStats.memoryUsage.heapUsed}MB` : 'N/A' },
-          { key: 'Heap Total', value: globalStats.memoryUsage ? `${globalStats.memoryUsage.heapTotal}MB` : 'N/A' },
-        ]
+        metrics: serverMetrics
       },
       {
-        name: '🌐 Server Cache Distribution (Global)',
-        metrics: distribution.length > 0 ? distribution.map((item: { webhookId: string; requestCount: number; percentage: number; lastActivity: string }) => ({
-          key: item.webhookId,
-          value: `${item.requestCount} requests (${item.percentage}%) - last: ${new Date(item.lastActivity).toLocaleTimeString()}`
-        })) : [{ key: 'No Data', value: 'No webhook requests cached on server' }]
+        name: '🌐 Storage Provider Information',
+        metrics: storageMetrics
       }
     ];
+
+    // Add distribution statistics if available
+    if (data.storage?.distribution) {
+      const dist = data.storage.distribution;
+      
+      // Overall statistics
+      resultMetrics.push({
+        name: '🌐 Server Cache Distribution Overview',
+        metrics: [
+          { key: 'Total Webhooks', value: dist.totalWebhooks.toString() },
+          { key: 'Total Requests', value: dist.totalRequests.toString() },
+          { key: 'Webhooks with Requests', value: dist.webhooksWithRequests.toString() },
+          { key: 'Total Storage Size', value: formatBytes(dist.storageUsage.totalSizeBytes) },
+          { key: 'Average Request Size', value: formatBytes(dist.storageUsage.averageRequestSize) },
+          { key: 'Largest Request Size', value: formatBytes(dist.storageUsage.largestRequestSize) },
+          { key: 'Total Operations', value: dist.performance.totalOperations.toString() },
+          { key: 'Provider Uptime', value: `${Math.floor(dist.performance.uptime / 1000)}s` }
+        ]
+      });
+
+      // Webhook distribution
+      if (dist.webhookDistribution.length > 0) {
+        resultMetrics.push({
+          name: '🌐 Server Cache Webhook Distribution',
+          metrics: dist.webhookDistribution.map(webhook => ({
+            key: webhook.webhookName || webhook.webhookId,
+            value: `${webhook.requestCount} requests (${webhook.percentage.toFixed(1)}%), ${formatBytes(webhook.totalSize)}, ${webhook.isActive ? 'Active' : 'Inactive'}`
+          }))
+        });
+      }
+
+      // Method distribution
+      if (dist.requestMethodDistribution.length > 0) {
+        resultMetrics.push({
+          name: '🌐 Server Cache Method Distribution',
+          metrics: dist.requestMethodDistribution.map(method => ({
+            key: method.method,
+            value: `${method.count} requests (${method.percentage.toFixed(1)}%), ${formatBytes(method.totalSize)}`
+          }))
+        });
+      }
+
+      // Size distribution
+      if (dist.requestSizeDistribution.length > 0) {
+        resultMetrics.push({
+          name: '🌐 Server Cache Size Distribution',
+          metrics: dist.requestSizeDistribution.map(size => ({
+            key: size.sizeRange,
+            value: `${size.count} requests (${size.percentage.toFixed(1)}%)`
+          }))
+        });
+      }
+
+      // Time distribution
+      if (dist.timeDistribution.length > 0) {
+        resultMetrics.push({
+          name: '🌐 Server Cache Time Distribution',
+          metrics: dist.timeDistribution.map(time => ({
+            key: time.period,
+            value: `${time.count} requests (${time.percentage.toFixed(1)}%)`
+          }))
+        });
+      }
+    }
+    
+    return resultMetrics;
   } catch (error) {
     console.error('Error fetching server cache metrics:', error);
     return [

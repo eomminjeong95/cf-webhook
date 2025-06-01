@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { getWebhookStorage } from '@/lib/storage';
+import { getWebhookStorage } from '@/lib/browser-storage';
 import type { 
   WebhookConfig, 
   WebhookRequest, 

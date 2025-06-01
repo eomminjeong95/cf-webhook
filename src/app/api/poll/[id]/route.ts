@@ -1,7 +1,8 @@
-// Polling API to get webhook requests from memory cache
+// Polling API to get webhook requests from storage manager only
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getCachedRequests } from '@/app/api/webhook/[id]/route';
+import { getStorageManager } from '@/lib/storage/storage-manager';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 
 // Rate limiting: minimum 1 second interval per webhook
 const lastPollTime = new Map<string, number>();
@@ -31,8 +32,16 @@ export async function GET(
   const timeSinceLastPoll = now - lastPoll;
 
   if (timeSinceLastPoll < MIN_POLL_INTERVAL) {
-    // Return cached result with rate limit info
-    const requests = getCachedRequests(webhookId);
+    // For rate limiting, get cached result from storage manager
+    let requests: any[] = [];
+    try {
+      const cloudflareContext = getCloudflareContext();
+      const storageManager = await getStorageManager(cloudflareContext);
+      requests = await storageManager.getRequests(webhookId, 100);
+    } catch (error) {
+      console.warn('Storage failed during rate limiting:', error);
+      requests = []; // Return empty array if storage fails
+    }
     
     const headers = {
       'Content-Type': 'application/json',
@@ -56,7 +65,7 @@ export async function GET(
         retryAfter: Math.ceil((MIN_POLL_INTERVAL - timeSinceLastPoll) / 1000),
       },
       { 
-        status: 200, // Return 200 but with cached data
+        status: 200,
         headers 
       }
     );
@@ -66,8 +75,32 @@ export async function GET(
   lastPollTime.set(webhookId, now);
 
   try {
-    // Get cached requests
-    const requests = getCachedRequests(webhookId);
+    // Get requests from storage manager only
+    let requests: any[] = [];
+    
+    try {
+      // Get Cloudflare context for OpenNext
+      const cloudflareContext = getCloudflareContext();
+      
+      const storageManager = await getStorageManager(cloudflareContext);
+      const providerInfo = storageManager.getProviderInfo();
+      
+      console.log(`Poll ${webhookId}: Using storage provider: ${providerInfo.name} (${providerInfo.type})`);
+      
+      // Get requests from storage (works with all provider types)
+      requests = await storageManager.getRequests(webhookId, 100);
+      console.log(`Poll ${webhookId}: Retrieved ${requests.length} requests from ${providerInfo.name}`);
+      
+    } catch (storageError) {
+      console.error(`Failed to fetch from storage:`, storageError);
+      // Return empty requests if storage fails
+      requests = [];
+    }
+    
+    // Sort by timestamp (newest first)
+    requests = requests
+      .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+      .slice(0, 100); // Limit to 100 most recent requests
     
     // Add CORS headers for cross-origin requests
     const headers = {

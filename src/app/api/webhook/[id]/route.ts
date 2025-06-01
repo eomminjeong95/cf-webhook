@@ -2,7 +2,8 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { generateId } from '@/lib/utils';
-import { webhookCache } from '@/lib/cache';
+import { getStorageManager } from '@/lib/storage/storage-manager';
+import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { WebhookRequest } from '@/types/webhook';
 
 
@@ -110,8 +111,35 @@ async function handleRequest(request: NextRequest, context: { params: Promise<{ 
       bodySize,
     };
 
-    // Store request in shared cache
-    webhookCache.addRequest(webhookId, webhookRequest);
+    // Store request using storage manager only
+    try {
+      const cloudflareContext = getCloudflareContext();
+      
+      const storageManager = await getStorageManager(cloudflareContext);
+      
+      await storageManager.saveRequest(webhookId, webhookRequest);
+      
+    } catch (storageError) {
+      console.error(`Webhook ${webhookId}: Failed to save to storage:`, storageError);
+      // Return error if storage fails - no fallback needed since MemoryProvider is available
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to save webhook request',
+          webhookId,
+          method,
+          timestamp: new Date().toISOString(),
+          message: 'Storage system unavailable'
+        },
+        { 
+          status: 500,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+          }
+        }
+      );
+    }
 
     console.log(`Webhook ${webhookId} received ${method} request from ${ip}`);
 
@@ -211,13 +239,3 @@ export async function OPTIONS(_request: NextRequest, _context: { params: Promise
     },
   });
 }
-
-// Export function to get cached requests (for polling)
-export function getCachedRequests(webhookId: string): WebhookRequest[] {
-  return webhookCache.getRequests(webhookId);
-}
-
-// Export function to get all cache statistics
-export function getAllCacheStats() {
-  return webhookCache.getAllStats();
-} 

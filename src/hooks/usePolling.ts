@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { getWebhookStorage } from '@/lib/storage';
+import { getWebhookStorage } from '@/lib/browser-storage';
 import type { WebhookRequest } from '@/types/webhook';
 
 interface PollingOptions {
