@@ -11,21 +11,62 @@ import WebhookHeader from '@/app/components/WebhookHeader';
 import Footer from '@/app/components/Footer';
 import RequestDetail from '@/app/components/RequestDetail';
 import D1ErrorAlert from '@/app/components/D1ErrorAlert';
-import { formatRelativeTime, getMethodColor, formatBytes } from '@/lib/utils';
+import { formatRelativeTime, getMethodColor, formatBytes, isValidWebhookId, generateWebhookUrl, getBaseUrl } from '@/lib/utils';
 import { StorageError } from '@/types/storage';
-import type { WebhookRequest } from '@/types/webhook';
+import type { WebhookRequest, WebhookConfig } from '@/types/webhook';
 
 export default function WebhookMonitorPage() {
   const params = useParams();
   const webhookId = params.id as string;
   
-  const { getWebhook } = useWebhooks();
-  const [webhook, setWebhook] = useState(getWebhook(webhookId));
+  const { getWebhook, createWebhook } = useWebhooks();
+  const [webhook, setWebhook] = useState<WebhookConfig | null>(null);
+  const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
+  const [webhookIdError, setWebhookIdError] = useState<string | null>(null);
   const [, setLastNotification] = useState<Date | null>(null);
   const [selectedRequest, setSelectedRequest] = useState<WebhookRequest | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('');
   const [pollingInterval, setPollingInterval] = useState(10000); // Default to 10 seconds
+
+  // Validate webhook ID and auto-create webhook if needed
+  useEffect(() => {
+    // First validate the webhook ID format
+    if (!isValidWebhookId(webhookId)) {
+      setWebhookIdError('Invalid webhook ID format. Must be 6-12 alphanumeric characters.');
+      return;
+    }
+
+    // Clear any previous error
+    setWebhookIdError(null);
+
+    // Check if webhook exists in local storage
+    const existingWebhook = getWebhook(webhookId);
+    if (existingWebhook) {
+      setWebhook(existingWebhook);
+      return;
+    }
+
+    // Auto-create webhook if it doesn't exist
+    setIsCreatingWebhook(true);
+    const newWebhook: WebhookConfig = {
+      id: webhookId,
+      name: `Webhook ${webhookId}`,
+      url: generateWebhookUrl(getBaseUrl(), webhookId),
+      createdAt: new Date(),
+      requestCount: 0,
+      isActive: true,
+    };
+
+    const success = createWebhook(newWebhook);
+    if (success) {
+      setWebhook(newWebhook);
+      console.log(`Auto-created webhook: ${webhookId}`);
+    } else {
+      console.error(`Failed to auto-create webhook: ${webhookId}`);
+    }
+    setIsCreatingWebhook(false);
+  }, [webhookId, getWebhook, createWebhook]);
 
   // Memoize callback functions to prevent usePolling re-initialization
   const handleNewRequest = useCallback((request: WebhookRequest) => {
@@ -78,14 +119,6 @@ export default function WebhookMonitorPage() {
     }
   }, []);
 
-  // Update webhook info when webhookId changes (not on every request change)
-  useEffect(() => {
-    const currentWebhook = getWebhook(webhookId);
-    if (currentWebhook && (!webhook || webhook.id !== currentWebhook.id)) {
-      setWebhook(currentWebhook);
-    }
-  }, [webhookId, getWebhook, webhook]);
-
   // Auto-select first request when requests load and no request is selected
   useEffect(() => {
     if (requests.length > 0 && !selectedRequest) {
@@ -93,15 +126,11 @@ export default function WebhookMonitorPage() {
     }
   }, [requests, selectedRequest]);
 
-
-
   // Handle interval change
   const handleIntervalChange = (newInterval: number) => {
     setPollingInterval(newInterval);
     setInterval(newInterval);
   };
-
-
 
   // Filter requests based on search and method
   const filteredRequests = requests.filter((request: WebhookRequest) => {
@@ -119,7 +148,8 @@ export default function WebhookMonitorPage() {
   // Get unique methods for filter
   const uniqueMethods = [...new Set(requests.map((r: WebhookRequest) => r.method))];
 
-  if (!webhook && !loading) {
+  // Show error for invalid webhook ID
+  if (webhookIdError) {
     return (
       <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors duration-200">
         <WebhookHeader 
@@ -128,27 +158,93 @@ export default function WebhookMonitorPage() {
         
         <main className="flex-1">
           <PageContainer>
+            <Card className="text-center py-12">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                Invalid Webhook ID
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                {webhookIdError}
+              </p>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                <p>Provided ID: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{webhookId}</code></p>
+                <p className="mt-2">Valid format: 6-12 alphanumeric characters (a-z, A-Z, 0-9)</p>
+              </div>
+            </Card>
+          </PageContainer>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
 
-          
-          <Card className="text-center py-12">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-yellow-100 mb-4">
-              <svg className="h-6 w-6 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.084 16.5c-.77.833.192 2.5 1.732 2.5z" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              Webhook Not Found in Storage
-            </h3>
-            <p className="text-sm text-gray-500 mb-6">
-              This webhook doesn&apos;t exist in your local storage, but you can still monitor requests sent to this URL.
-            </p>
-            <div className="text-sm text-gray-500">
-              <p>Monitoring requests for webhook ID: <code className="bg-gray-100 px-2 py-1 rounded">{webhookId}</code></p>
-            </div>
-          </Card>
-        </PageContainer>
-      </main>
-      <Footer />
+  // Show loading state while creating webhook
+  if (isCreatingWebhook || (!webhook && loading)) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors duration-200">
+        <WebhookHeader 
+          currentWebhookId={webhookId} 
+        />
+        
+        <main className="flex-1">
+          <PageContainer>
+            <Card className="text-center py-12">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 mb-4">
+                <svg className="h-6 w-6 text-blue-600 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                {isCreatingWebhook ? 'Creating Webhook' : 'Loading'}
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                {isCreatingWebhook ? 'Setting up your webhook for monitoring...' : 'Loading webhook data...'}
+              </p>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                <p>Webhook ID: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{webhookId}</code></p>
+              </div>
+            </Card>
+          </PageContainer>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // This case should no longer happen since we auto-create webhooks
+  // Keep as fallback for error cases
+  if (!webhook && !loading && !isCreatingWebhook && !webhookIdError) {
+    return (
+      <div className="min-h-screen bg-gray-50 dark:bg-gray-900 flex flex-col transition-colors duration-200">
+        <WebhookHeader 
+          currentWebhookId={webhookId} 
+        />
+        
+        <main className="flex-1">
+          <PageContainer>
+            <Card className="text-center py-12">
+              <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                Failed to Create Webhook
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">
+                Unable to create or load webhook. Please try refreshing the page.
+              </p>
+              <div className="text-sm text-gray-500 dark:text-gray-400">
+                <p>Webhook ID: <code className="bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded">{webhookId}</code></p>
+              </div>
+            </Card>
+          </PageContainer>
+        </main>
+        <Footer />
       </div>
     );
   }
