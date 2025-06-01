@@ -10,9 +10,14 @@ import type { WebhookConfig } from '@/types/webhook';
 
 export default function HomePage() {
   const router = useRouter();
-  const { webhooks, createWebhook } = useWebhooks();
+  const { webhooks, loading, createWebhook } = useWebhooks();
 
   useEffect(() => {
+    // Wait for data to load before making decisions
+    if (loading) {
+      return;
+    }
+
     const redirectToWebhook = async () => {
       if (webhooks.length > 0) {
         // If webhook exists, redirect to the first one
@@ -32,18 +37,18 @@ export default function HomePage() {
             isActive: true,
           };
 
-                     createWebhook(newWebhook);
-           router.push(`/w/${webhookId}`);
-         } catch (error) {
-           console.error('Error creating webhook:', error);
-           // If creation fails, redirect to a default page
-           router.push('/w/default');
-         }
-       }
-     };
+          createWebhook(newWebhook);
+          router.push(`/w/${webhookId}`);
+        } catch (error) {
+          console.error('Error creating webhook:', error);
+          // If creation fails, redirect to a default page
+          router.push('/w/default');
+        }
+      }
+    };
 
-     redirectToWebhook();
-   }, [webhooks, router, createWebhook]);
+    redirectToWebhook();
+  }, [webhooks, loading, router, createWebhook]);
 
   // Show loading state
   return (
@@ -55,7 +60,9 @@ export default function HomePage() {
           </svg>
         </div>
         <div className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mb-3">Webhook Manager</div>
-        <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">Setting up your workspace...</div>
+        <div className="text-sm sm:text-base text-gray-500 dark:text-gray-400">
+          {loading ? 'Loading your webhooks...' : 'Setting up your workspace...'}
+        </div>
         <div className="mt-4 flex justify-center">
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
         </div>
