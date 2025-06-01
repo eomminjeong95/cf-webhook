@@ -40,6 +40,34 @@ export async function GET(
       requests = await storageManager.getRequests(webhookId, 100);
     } catch (error) {
       console.warn('Storage failed during rate limiting:', error);
+      
+      // If it's a D1 configuration error during rate limiting, still return early failure
+      if (error instanceof Error && 'provider' in error && (error as any).provider === 'd1') {
+        const d1Error = error as any;
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'D1 Database Configuration Error',
+            webhookId,
+            requests: [],
+            timestamp: new Date().toISOString(),
+            message: d1Error.message,
+            storageError: {
+              provider: 'd1',
+              type: d1Error.details?.isBindingError ? 'binding_error' : 'initialization_error',
+              details: d1Error.details?.configurationHelp || null
+            }
+          },
+          { 
+            status: 200,
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        );
+      }
+      
       requests = []; // Return empty array if storage fails
     }
     
@@ -93,6 +121,34 @@ export async function GET(
       
     } catch (storageError) {
       console.error(`Failed to fetch from storage:`, storageError);
+      
+      // Check if this is a D1-specific error and provide detailed information
+      if (storageError instanceof Error && 'provider' in storageError && (storageError as any).provider === 'd1') {
+        const d1Error = storageError as any; // StorageError with D1 details
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'D1 Database Configuration Error',
+            webhookId,
+            requests: [],
+            timestamp: new Date().toISOString(),
+            message: d1Error.message,
+            storageError: {
+              provider: 'd1',
+              type: d1Error.details?.isBindingError ? 'binding_error' : 'initialization_error',
+              details: d1Error.details?.configurationHelp || null
+            }
+          },
+          { 
+            status: 200, // Return 200 so the client can handle the error properly
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        );
+      }
+      
       // Return empty requests if storage fails
       requests = [];
     }

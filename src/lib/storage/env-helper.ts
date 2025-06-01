@@ -1,5 +1,7 @@
 // Environment helper for accessing Cloudflare bindings
 // Handles different execution contexts (Workers, Next.js, local dev, etc.)
+
+import { StorageError } from '@/types/storage';
 //
 // Configuration Guidelines:
 // 
@@ -120,10 +122,7 @@ export function getPreferredStorageProvider(env?: CloudflareEnv): 'r2' | 'd1' | 
   // If explicitly set to D1, it must be available
   if (explicitProvider === 'd1') {
     if (!isD1Available(environment)) {
-      throw new Error(
-        'STORAGE_PROVIDER is set to "d1" but WEBHOOK_DB binding is not available or functional. ' +
-        'Please check your wrangler.toml configuration, or set STORAGE_PROVIDER=memory for development.'
-      );
+      throw StorageError.d1BindingNotFound('WEBHOOK_DB');
     }
     return 'd1';
   }

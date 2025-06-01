@@ -121,7 +121,35 @@ async function handleRequest(request: NextRequest, context: { params: Promise<{ 
       
     } catch (storageError) {
       console.error(`Webhook ${webhookId}: Failed to save to storage:`, storageError);
-      // Return error if storage fails - no fallback needed since MemoryProvider is available
+      
+      // Check if this is a D1-specific error and provide detailed information
+      if (storageError instanceof Error && 'provider' in storageError && (storageError as any).provider === 'd1') {
+        const d1Error = storageError as any; // StorageError with D1 details
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'D1 Database Configuration Error',
+            webhookId,
+            method,
+            timestamp: new Date().toISOString(),
+            message: d1Error.message,
+            storageError: {
+              provider: 'd1',
+              type: d1Error.details?.isBindingError ? 'binding_error' : 'initialization_error',
+              details: d1Error.details?.configurationHelp || null
+            }
+          },
+          { 
+            status: 503, // Service Unavailable due to configuration issue
+            headers: {
+              'Content-Type': 'application/json',
+              'Access-Control-Allow-Origin': '*',
+            }
+          }
+        );
+      }
+      
+      // Return generic error for other storage failures
       return NextResponse.json(
         {
           success: false,

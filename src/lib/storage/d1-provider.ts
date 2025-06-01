@@ -16,16 +16,15 @@ export class D1StorageProvider implements StorageProvider {
   constructor(database: D1Database, config: D1StorageConfig, env?: any) {
     // Validate that the database object has the required D1 methods
     if (!database || typeof database !== 'object') {
-      throw new StorageError('D1 database binding is not available or invalid', 'd1');
+      throw StorageError.d1BindingNotFound(config.databaseBinding || 'WEBHOOK_DB');
     }
     
     if (typeof database.prepare !== 'function') {
-      throw new StorageError(
+      throw StorageError.d1InitializationFailed(
         'Invalid D1 database object: missing prepare method. ' +
         'This usually means the D1 binding is not properly configured or you are running in an environment ' +
         'where D1 is not available (like local development). ' +
-        'Consider setting STORAGE_PROVIDER=memory for development.',
-        'd1'
+        'Consider setting STORAGE_PROVIDER=memory for development.'
       );
     }
     
@@ -117,7 +116,7 @@ export class D1StorageProvider implements StorageProvider {
     } catch (error) {
       console.error(`D1Provider: Initialization failed:`, error);
       this.initialized = false;
-      throw new StorageError(`Failed to initialize D1 database: ${error}`, 'd1');
+      throw StorageError.d1InitializationFailed(error);
     }
   }
 

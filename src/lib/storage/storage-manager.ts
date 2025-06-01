@@ -55,14 +55,15 @@ export class StorageManager {
       
       case 'd1':
         if (!env?.WEBHOOK_DB) {
-          throw new StorageError(
-            'D1 database binding not found. Please configure WEBHOOK_DB in wrangler.toml',
-            'd1'
-          );
+          throw StorageError.d1BindingNotFound('WEBHOOK_DB');
         }
         const d1Provider = new D1StorageProvider(env.WEBHOOK_DB, config as D1StorageConfig, env);
         // Initialize database tables on first use
-        await d1Provider.initialize();
+        try {
+          await d1Provider.initialize();
+        } catch (error) {
+          throw StorageError.d1InitializationFailed(error);
+        }
         return d1Provider;
       
       case 'memory':

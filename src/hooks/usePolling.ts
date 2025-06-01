@@ -27,6 +27,11 @@ interface PollingState {
   setInterval: (interval: number) => void;
   currentInterval: number;
   countdown: number;
+  storageError?: {
+    provider: string;
+    type: string;
+    details: any;
+  };
 }
 
 interface PollingResponse {
@@ -38,6 +43,12 @@ interface PollingResponse {
   error?: string;
   rateLimited?: boolean;
   retryAfter?: number;
+  message?: string;
+  storageError?: {
+    provider: string;
+    type: string;
+    details: any;
+  };
 }
 
 export function usePolling(
@@ -59,6 +70,11 @@ export function usePolling(
   const [isPaused, setIsPaused] = useState(false);
   const [currentInterval, setCurrentInterval] = useState(interval);
   const [countdown, setCountdown] = useState(0);
+  const [storageError, setStorageError] = useState<{
+    provider: string;
+    type: string;
+    details: any;
+  } | undefined>(undefined);
   
   // Refs to manage polling state
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -110,6 +126,10 @@ export function usePolling(
       
       if (data.success) {
         const serverRequests = data.requests || [];
+        
+        // Clear any previous storage errors
+        setStorageError(undefined);
+        setError(null);
         
         // Get current requests from localStorage to merge with server data
         const storage = getWebhookStorage();
@@ -181,7 +201,15 @@ export function usePolling(
           }, currentInterval);
         }
       } else {
-        throw new Error(data.error || 'Failed to fetch requests');
+        // Check if this is a D1 storage error
+        if (data.storageError && data.storageError.provider === 'd1') {
+          setStorageError(data.storageError);
+          setError(data.message || data.error || 'D1 Database Configuration Error');
+          setIsConnected(false);
+          if (onErrorRef.current) onErrorRef.current(data.message || data.error || 'D1 Database Configuration Error');
+        } else {
+          throw new Error(data.error || 'Failed to fetch requests');
+        }
       }
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
@@ -284,6 +312,9 @@ export function usePolling(
         if (data.success) {
           const serverRequests = data.requests || [];
           
+          // Clear any previous storage errors
+          setStorageError(undefined);
+          
           // Get current requests from localStorage to merge with server data
           const storage = getWebhookStorage();
           const localRequests = storage.getRequests(webhookId);
@@ -322,7 +353,15 @@ export function usePolling(
             console.log(`[Polling] Rate limited for ${webhookId}, will retry normally after interval`);
           }
         } else {
-          throw new Error(data.error || 'Failed to fetch requests');
+          // Check if this is a D1 storage error
+          if (data.storageError && data.storageError.provider === 'd1') {
+            setStorageError(data.storageError);
+            setError(data.message || data.error || 'D1 Database Configuration Error');
+            setIsConnected(false);
+            if (onErrorRef.current) onErrorRef.current(data.message || data.error || 'D1 Database Configuration Error');
+          } else {
+            throw new Error(data.error || 'Failed to fetch requests');
+          }
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -433,5 +472,6 @@ export function usePolling(
     },
     currentInterval,
     countdown,
+    storageError,
   };
 } 

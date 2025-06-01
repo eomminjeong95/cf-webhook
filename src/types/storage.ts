@@ -167,16 +167,19 @@ export interface TimeDistribution {
 export class StorageError extends Error {
   public readonly timestamp: Date;
   public readonly operation?: string;
+  public readonly details?: Record<string, any>;
   
   constructor(
     message: string, 
     public readonly provider: string,
-    operation?: string
+    operation?: string,
+    details?: Record<string, any>
   ) {
     super(message);
     this.name = 'StorageError';
     this.timestamp = new Date();
     this.operation = operation;
+    this.details = details;
   }
   
   toJSON() {
@@ -185,8 +188,77 @@ export class StorageError extends Error {
       message: this.message,
       provider: this.provider,
       operation: this.operation,
+      details: this.details,
       timestamp: this.timestamp.toISOString(),
       stack: this.stack
     };
+  }
+
+  // Check if this is a D1 binding error
+  isD1BindingError(): boolean {
+    return this.provider === 'd1' && (
+      this.message.includes('database binding') ||
+      this.message.includes('D1 database binding not found') ||
+      this.message.includes('WEBHOOK_DB') ||
+      this.details?.isBindingError === true
+    );
+  }
+
+  // Check if this is a D1 initialization error
+  isD1InitializationError(): boolean {
+    return this.provider === 'd1' && (
+      this.message.includes('initialization') ||
+      this.message.includes('Failed to initialize D1') ||
+      this.message.includes('prepare method') ||
+      this.details?.isInitializationError === true
+    );
+  }
+
+  // Static factory method for D1 binding errors
+  static d1BindingNotFound(databaseBinding: string = 'WEBHOOK_DB'): StorageError {
+    return new StorageError(
+      `D1 database binding "${databaseBinding}" not found. Please configure the binding in your wrangler.toml file.`,
+      'd1',
+      'binding_check',
+      {
+        isBindingError: true,
+        databaseBinding,
+        configurationHelp: {
+          message: 'D1 database binding is not configured',
+          steps: [
+            'Go to Cloudflare Dashboard',
+            'Navigate to Workers & Pages > Your Worker',
+            'Go to Settings > Variables and Secrets',
+            'Add a D1 Database binding',
+            'Set Variable name to "WEBHOOK_DB"',
+            'Select your D1 database'
+          ],
+          dashboardUrl: 'https://dash.cloudflare.com/'
+        }
+      }
+    );
+  }
+
+  // Static factory method for D1 initialization errors
+  static d1InitializationFailed(originalError: any): StorageError {
+    return new StorageError(
+      `Failed to initialize D1 database. This usually indicates the D1 binding is not properly configured or the database is not accessible.`,
+      'd1',
+      'initialization',
+      {
+        isInitializationError: true,
+        originalError: originalError?.toString(),
+        configurationHelp: {
+          message: 'D1 database initialization failed',
+          steps: [
+            'Verify D1 database binding in wrangler.toml',
+            'Check that the database exists in Cloudflare Dashboard',
+            'Ensure the binding name matches "WEBHOOK_DB"',
+            'Verify database permissions and accessibility'
+          ],
+          dashboardUrl: 'https://dash.cloudflare.com/'
+        }
+      }
+    );
   }
 } 

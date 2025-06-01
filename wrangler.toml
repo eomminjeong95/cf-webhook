@@ -115,7 +115,7 @@ STORAGE_PROVIDER = "d1"
 STORAGE_TABLE_PREFIX = "webhook"
 DEBUG_STORAGE = "false"
 
-[[env.production.d1_databases]]
-binding = "WEBHOOK_DB"
-database_name = "cf-webhook-db"
-database_id = "${D1_DATABASE_ID}"
+# [[env.production.d1_databases]]
+# binding = "WEBHOOK_DB"
+# database_name = "cf-webhook-db"
+# database_id = "${D1_DATABASE_ID}"

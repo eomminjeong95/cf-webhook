@@ -10,7 +10,9 @@ import { PageContainer, Card } from '@/app/components/Layout';
 import WebhookHeader from '@/app/components/WebhookHeader';
 import Footer from '@/app/components/Footer';
 import RequestDetail from '@/app/components/RequestDetail';
+import D1ErrorAlert from '@/app/components/D1ErrorAlert';
 import { formatRelativeTime, getMethodColor, formatBytes } from '@/lib/utils';
+import { StorageError } from '@/types/storage';
 import type { WebhookRequest } from '@/types/webhook';
 
 export default function WebhookMonitorPage() {
@@ -62,6 +64,7 @@ export default function WebhookMonitorPage() {
     currentInterval,
     countdown,
     refreshNow,
+    storageError,
   } = usePolling(webhookId, {
     interval: pollingInterval,
     onNewRequest: handleNewRequest,
@@ -158,8 +161,21 @@ export default function WebhookMonitorPage() {
       
       <main className="flex-1">
         <PageContainer>
-          {/* Error display */}
-          {error && (
+          {/* D1 Error display */}
+          {storageError && storageError.provider === 'd1' && (
+            <D1ErrorAlert 
+              error={new StorageError(
+                error || 'D1 Database Configuration Error',
+                'd1',
+                storageError.type,
+                storageError.details
+              )}
+              className="mb-4"
+            />
+          )}
+          
+          {/* General Error display */}
+          {error && (!storageError || storageError.provider !== 'd1') && (
             <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-400">
               {error}
             </div>

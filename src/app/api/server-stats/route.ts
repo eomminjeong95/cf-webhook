@@ -33,8 +33,20 @@ export async function GET(request: NextRequest) {
         distribution: distributionStats
       };
     } catch (error) {
-      storageError = error instanceof Error ? error.message : 'Unknown storage error';
       console.error('Failed to get storage stats:', error);
+      
+      // Check if this is a D1-specific error and provide detailed information
+      if (error instanceof Error && 'provider' in error && (error as any).provider === 'd1') {
+        const d1Error = error as any; // StorageError with D1 details
+        storageError = {
+          provider: 'd1',
+          type: d1Error.details?.isBindingError ? 'binding_error' : 'initialization_error',
+          message: d1Error.message,
+          details: d1Error.details?.configurationHelp || null
+        };
+      } else {
+        storageError = error instanceof Error ? error.message : 'Unknown storage error';
+      }
     }
     
     const stats = {
