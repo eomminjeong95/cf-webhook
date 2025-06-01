@@ -1,13 +1,8 @@
-# 🪝 CF-Webhook
+# CF-Webhook
+
+[English](README.md) | [中文文档](README_CN.md)
 
 A modern webhook management platform built with Cloudflare Workers and Next.js.
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yingca1/cf-webhook)
-
-## 📖 Documentation
-
-- [English](README.md) (Current)
-- [中文文档](README_CN.md)
 
 ## ✨ Features
 
@@ -23,7 +18,7 @@ A modern webhook management platform built with Cloudflare Workers and Next.js.
 
 ### One-Click Deploy (Recommended)
 
-Click the **"Deploy to Cloudflare Workers"** button above to deploy instantly!
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yingca1/cf-webhook) 
 
 **Requirements:**
 - Cloudflare account (free tier available)
@@ -31,7 +26,7 @@ Click the **"Deploy to Cloudflare Workers"** button above to deploy instantly!
 
 After deployment, your webhook service will be live at `https://your-app-name.your-subdomain.workers.dev`.
 
-### Manual Deployment (Optional)
+### Manual Deployment
 
 ```bash
 # Clone the repository

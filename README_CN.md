@@ -1,13 +1,8 @@
-# 🪝 CF-Webhook
+# CF-Webhook
+
+[English](README.md) | [中文文档](README_CN.md)
 
 基于 Cloudflare Workers 和 Next.js 构建的现代化 Webhook 管理平台。
-
-[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yingca1/cf-webhook)
-
-## 📖 文档
-
-- [English](README.md)
-- [中文文档](README_CN.md) (当前)
 
 ## ✨ 功能特性
 
@@ -23,7 +18,7 @@
 
 ### 一键部署（推荐）
 
-点击上方 **"Deploy to Cloudflare Workers"** 按钮即可立即部署！
+[![Deploy to Cloudflare Workers](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/yingca1/cf-webhook) 
 
 **准备要求：**
 - Cloudflare 账户（免费版即可）
