@@ -516,50 +516,52 @@ export default function WebhookMonitorPage() {
                 </div>
               ) : (
                 <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                  {filteredRequests.map((request: WebhookRequest) => (
+                  {filteredRequests.map((request: WebhookRequest, index: number) => (
                     <div
                       key={request.id}
-                      className={`px-3 py-2 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 group ${
+                      className={`px-3 py-1.5 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 group ${
                         selectedRequest?.id === request.id 
                           ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-500' 
                           : ''
                       }`}
                       onClick={() => setSelectedRequest(request)}
                     >
+                      {/* Top row: Number, Method badge, simplified ID, and delete button */}
                       <div className="flex items-center justify-between mb-1">
-                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getMethodColor(request.method)}`}>
-                          {request.method}
-                        </span>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs text-gray-500 dark:text-gray-400">
-                            {formatRelativeTime(request.timestamp)}
+                        <div className="flex items-center space-x-2 min-w-0 flex-1">
+                          <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-6 text-right">
+                            {filteredRequests.length - index}
                           </span>
-                          {/* Delete button */}
-                          <button
-                            onClick={(e) => handleDeleteRequest(request.id, e)}
-                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
-                            title="Delete request"
-                          >
-                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getMethodColor(request.method)}`}>
+                            {request.method}
+                          </span>
+                          <span className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate">
+                            #{request.id.split('-')[0]}
+                          </span>
                         </div>
-                      </div>
-                      
-                      <div className="text-sm font-medium text-gray-900 dark:text-white mb-1 font-mono truncate">
-                        {request.path || '/'}
-                      </div>
-                      
-                      <div className="flex items-center text-xs text-gray-500 dark:text-gray-400 space-x-1">
-                        <span className="flex items-center">
-                          <svg className="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9v-9m0-9v9" />
+                        <button
+                          onClick={(e) => handleDeleteRequest(request.id, e)}
+                          className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
+                          title="Delete request"
+                        >
+                          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                           </svg>
-                          {request.ip}
+                        </button>
+                      </div>
+                      
+                      {/* Bottom row: Compact info display */}
+                      <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                        <div className="flex items-center space-x-1.5 min-w-0 flex-1">
+                          <span className="truncate" title={request.ip}>
+                            {request.ip}
+                          </span>
+                          <span>•</span>
+                          <span>{formatBytes(request.bodySize)}</span>
+                        </div>
+                        <span className="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                          {formatRelativeTime(request.timestamp)}
                         </span>
-                        <span>•</span>
-                        <span>{formatBytes(request.bodySize)}</span>
                       </div>
                     </div>
                   ))}
