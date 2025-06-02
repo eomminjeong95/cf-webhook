@@ -13,6 +13,7 @@ import RequestDetail from '@/app/components/RequestDetail';
 import D1ErrorAlert from '@/app/components/D1ErrorAlert';
 import { formatRelativeTime, getMethodColor, formatBytes, isValidWebhookId, generateWebhookUrl, getBaseUrl } from '@/lib/utils';
 import { StorageError } from '@/types/storage';
+import { getWebhookStorage } from '@/lib/browser-storage';
 import type { WebhookRequest, WebhookConfig } from '@/types/webhook';
 
 export default function WebhookMonitorPage() {
@@ -28,6 +29,74 @@ export default function WebhookMonitorPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [methodFilter, setMethodFilter] = useState<string>('');
   const [pollingInterval, setPollingInterval] = useState(10000); // Default to 10 seconds
+  const [localRequests, setLocalRequests] = useState<WebhookRequest[]>([]);
+
+  // Delete request handler
+  const handleDeleteRequest = useCallback(async (requestId: string, event?: React.MouseEvent) => {
+    if (event) {
+      event.stopPropagation(); // Prevent selecting the request when clicking delete
+    }
+    
+    try {
+      // First delete from remote storage via API
+      const response = await fetch(`/api/webhook/${webhookId}/requests/${requestId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      const result = await response.json() as { success: boolean; error?: string; message?: string };
+      
+      if (result.success) {
+        // Also delete from local storage
+        const storage = getWebhookStorage();
+        storage.deleteRequest(webhookId, requestId);
+        
+        // Update local state immediately
+        setLocalRequests(prev => prev.filter(req => req.id !== requestId));
+        
+        // If the deleted request was selected, clear the selection
+        if (selectedRequest?.id === requestId) {
+          setSelectedRequest(null);
+        }
+        
+        console.log(`Successfully deleted request ${requestId} from remote and local storage`);
+      } else {
+        console.error(`Failed to delete request ${requestId} from remote storage:`, result.error);
+        
+        // If remote deletion failed, still try to delete from local storage
+        const storage = getWebhookStorage();
+        const localSuccess = storage.deleteRequest(webhookId, requestId);
+        
+        if (localSuccess) {
+          setLocalRequests(prev => prev.filter(req => req.id !== requestId));
+          if (selectedRequest?.id === requestId) {
+            setSelectedRequest(null);
+          }
+          console.log(`Deleted request ${requestId} from local storage only (remote deletion failed)`);
+        }
+      }
+    } catch (error) {
+      console.error('Error deleting request:', error);
+      
+      // If API call failed, still try to delete from local storage
+      try {
+        const storage = getWebhookStorage();
+        const localSuccess = storage.deleteRequest(webhookId, requestId);
+        
+        if (localSuccess) {
+          setLocalRequests(prev => prev.filter(req => req.id !== requestId));
+          if (selectedRequest?.id === requestId) {
+            setSelectedRequest(null);
+          }
+          console.log(`Deleted request ${requestId} from local storage only (API call failed)`);
+        }
+      } catch (localError) {
+        console.error('Failed to delete from local storage as well:', localError);
+      }
+    }
+  }, [webhookId, selectedRequest]);
 
   // Validate webhook ID and auto-create webhook if needed
   useEffect(() => {
@@ -112,6 +181,11 @@ export default function WebhookMonitorPage() {
     onError: handlePollingError,
   });
 
+  // Sync polling requests with local state
+  useEffect(() => {
+    setLocalRequests(requests);
+  }, [requests]);
+
   // Request notification permission on mount
   useEffect(() => {
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
@@ -121,10 +195,10 @@ export default function WebhookMonitorPage() {
 
   // Auto-select first request when requests load and no request is selected
   useEffect(() => {
-    if (requests.length > 0 && !selectedRequest) {
-      setSelectedRequest(requests[0]);
+    if (localRequests.length > 0 && !selectedRequest) {
+      setSelectedRequest(localRequests[0]);
     }
-  }, [requests, selectedRequest]);
+  }, [localRequests, selectedRequest]);
 
   // Handle interval change
   const handleIntervalChange = (newInterval: number) => {
@@ -133,7 +207,7 @@ export default function WebhookMonitorPage() {
   };
 
   // Filter requests based on search and method
-  const filteredRequests = requests.filter((request: WebhookRequest) => {
+  const filteredRequests = localRequests.filter((request: WebhookRequest) => {
     const matchesSearch = searchTerm === '' || 
       request.body.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.path.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -146,7 +220,7 @@ export default function WebhookMonitorPage() {
   });
 
   // Get unique methods for filter
-  const uniqueMethods = [...new Set(requests.map((r: WebhookRequest) => r.method))];
+  const uniqueMethods = [...new Set(localRequests.map((r: WebhookRequest) => r.method))];
 
   // Show error for invalid webhook ID
   if (webhookIdError) {
@@ -409,7 +483,7 @@ export default function WebhookMonitorPage() {
                 {/* Show filtered count inline */}
                 {(searchTerm || methodFilter) && (
                   <span className="text-xs text-gray-500 dark:text-gray-400 self-center whitespace-nowrap">
-                    {filteredRequests.length}/{requests.length}
+                    {filteredRequests.length}/{localRequests.length}
                   </span>
                 )}
               </div>
@@ -417,7 +491,7 @@ export default function WebhookMonitorPage() {
 
             {/* Request List */}
             <div className="flex-1 overflow-y-auto">
-              {loading && requests.length === 0 ? (
+              {loading && localRequests.length === 0 ? (
                 <div className="p-4 text-center">
                   <div className="animate-pulse">
                     <div className="mx-auto h-6 w-6 bg-gray-200 dark:bg-gray-600 rounded-full mb-2"></div>
@@ -431,10 +505,10 @@ export default function WebhookMonitorPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                   </svg>
                   <h3 className="text-sm font-medium text-gray-900 dark:text-white mb-1">
-                    {requests.length === 0 ? 'No requests yet' : 'No matching requests'}
+                    {localRequests.length === 0 ? 'No requests yet' : 'No matching requests'}
                   </h3>
                   <p className="text-xs text-gray-500 dark:text-gray-400">
-                    {requests.length === 0 
+                    {localRequests.length === 0 
                       ? `Send HTTP requests to your webhook URL to see them here.`
                       : 'Try adjusting your search or filter criteria.'
                     }
@@ -445,7 +519,7 @@ export default function WebhookMonitorPage() {
                   {filteredRequests.map((request: WebhookRequest) => (
                     <div
                       key={request.id}
-                      className={`px-3 py-2 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 ${
+                      className={`px-3 py-2 cursor-pointer transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/50 group ${
                         selectedRequest?.id === request.id 
                           ? 'bg-blue-50 dark:bg-blue-900/20 border-r-2 border-blue-500' 
                           : ''
@@ -456,9 +530,21 @@ export default function WebhookMonitorPage() {
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getMethodColor(request.method)}`}>
                           {request.method}
                         </span>
-                        <span className="text-xs text-gray-500 dark:text-gray-400">
-                          {formatRelativeTime(request.timestamp)}
-                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className="text-xs text-gray-500 dark:text-gray-400">
+                            {formatRelativeTime(request.timestamp)}
+                          </span>
+                          {/* Delete button */}
+                          <button
+                            onClick={(e) => handleDeleteRequest(request.id, e)}
+                            className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all duration-200"
+                            title="Delete request"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
                       </div>
                       
                       <div className="text-sm font-medium text-gray-900 dark:text-white mb-1 font-mono truncate">
