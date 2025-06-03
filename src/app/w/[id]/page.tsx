@@ -6,6 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'next/navigation';
 import { useWebhooks } from '@/hooks/useLocalStorage';
 import { usePolling } from '@/hooks/usePolling';
+import { useRequestNotes } from '@/hooks/useRequestNotes';
 import { PageContainer, Card } from '@/app/components/Layout';
 import WebhookHeader from '@/app/components/WebhookHeader';
 import Footer from '@/app/components/Footer';
@@ -21,6 +22,7 @@ export default function WebhookMonitorPage() {
   const webhookId = params.id as string;
   
   const { getWebhook, createWebhook } = useWebhooks();
+  const { hasNote, getNote, getAllNotes } = useRequestNotes(webhookId);
   const [webhook, setWebhook] = useState<WebhookConfig | null>(null);
   const [isCreatingWebhook, setIsCreatingWebhook] = useState(false);
   const [webhookIdError, setWebhookIdError] = useState<string | null>(null);
@@ -30,6 +32,7 @@ export default function WebhookMonitorPage() {
   const [methodFilter, setMethodFilter] = useState<string>('');
   const [pollingInterval, setPollingInterval] = useState(10000); // Default to 10 seconds
   const [localRequests, setLocalRequests] = useState<WebhookRequest[]>([]);
+  const [noteUpdateTrigger, setNoteUpdateTrigger] = useState(0); // Trigger to force re-render when notes change
 
   // Delete request handler
   const handleDeleteRequest = useCallback(async (requestId: string, event?: React.MouseEvent) => {
@@ -205,6 +208,11 @@ export default function WebhookMonitorPage() {
     setPollingInterval(newInterval);
     setInterval(newInterval);
   };
+
+  // Handle note changes - force re-render to update note display in request list
+  const handleNoteChange = useCallback(() => {
+    setNoteUpdateTrigger(prev => prev + 1);
+  }, []);
 
   // Filter requests based on search and method
   const filteredRequests = localRequests.filter((request: WebhookRequest) => {
@@ -526,7 +534,7 @@ export default function WebhookMonitorPage() {
                       }`}
                       onClick={() => setSelectedRequest(request)}
                     >
-                      {/* Top row: Number, Method badge, simplified ID, and delete button */}
+                      {/* Top row: Number, Method badge, simplified ID, note indicator, and delete button */}
                       <div className="flex items-center justify-between mb-1">
                         <div className="flex items-center space-x-2 min-w-0 flex-1">
                           <span className="text-xs font-medium text-gray-500 dark:text-gray-400 w-6 text-right">
@@ -538,6 +546,38 @@ export default function WebhookMonitorPage() {
                           <span className="text-xs font-mono text-gray-600 dark:text-gray-400 truncate">
                             #{request.id.split('-')[0]}
                           </span>
+                          {(() => {
+                            // Force re-evaluation by reading directly from localStorage
+                            let currentNote = '';
+                            try {
+                              const stored = localStorage.getItem('webhook-request-notes');
+                              if (stored) {
+                                const allNotes = JSON.parse(stored);
+                                const webhookNotes = allNotes[webhookId] || {};
+                                currentNote = webhookNotes[request.id]?.note || '';
+                              }
+                            } catch (error) {
+                              console.error('Failed to read note:', error);
+                            }
+                            
+                            if (currentNote) {
+                              return (
+                                <div className="flex items-center space-x-1.5 min-w-0 flex-1" title="Has note" key={`note-${request.id}-${noteUpdateTrigger}`}>
+                                  <svg 
+                                    className="w-3 h-3 text-blue-500 dark:text-blue-400 flex-shrink-0" 
+                                    fill="currentColor" 
+                                    viewBox="0 0 20 20"
+                                  >
+                                    <path fillRule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H7l-4 4V5z" clipRule="evenodd" />
+                                  </svg>
+                                  <span className="text-xs text-gray-600 dark:text-gray-400 truncate">
+                                    {currentNote}
+                                  </span>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                         <button
                           onClick={(e) => handleDeleteRequest(request.id, e)}
@@ -577,6 +617,7 @@ export default function WebhookMonitorPage() {
                 request={selectedRequest}
                 onClose={() => setSelectedRequest(null)}
                 isInline={true}
+                onNoteChange={handleNoteChange}
               />
             ) : (
               <div className="flex-1 flex items-center justify-center p-8">

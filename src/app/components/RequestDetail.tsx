@@ -2,20 +2,33 @@
 
 'use client';
 
-import { useState } from 'react';
-import { formatDateTime, formatBytes, getMethodColor, getContentTypeName, copyToClipboard, prettifyJson } from '@/lib/utils';
+import { useState, useMemo } from 'react';
+import { formatDateTime, formatBytes, getContentTypeName, copyToClipboard, prettifyJson } from '@/lib/utils';
 import { Button } from './Layout';
+import { useRequestNotes } from '@/hooks/useRequestNotes';
+import NoteEditModal from './NoteEditModal';
 import type { WebhookRequest } from '@/types/webhook';
 
 interface RequestDetailProps {
   request: WebhookRequest;
   onClose: () => void;
   isInline?: boolean;
+  onNoteChange?: () => void; // Callback when note is saved/deleted
 }
 
-export default function RequestDetail({ request, onClose, isInline = false }: RequestDetailProps) {
+export default function RequestDetail({ request, onClose, isInline = false, onNoteChange }: RequestDetailProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'headers' | 'body' | 'raw'>('overview');
   const [copySuccess, setCopySuccess] = useState<string | null>(null);
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
+  const { saveNote, deleteNote, getNote } = useRequestNotes(request.webhookId);
+  
+  // Memoize the stable request ID and webhook ID to prevent unnecessary effects
+  const stableRequestId = useMemo(() => request.id, [request.id]);
+  const stableWebhookId = useMemo(() => request.webhookId, [request.webhookId]);
+  
+  // Get current note
+  const currentNoteData = getNote(stableRequestId);
+  const currentNote = currentNoteData?.note || '';
 
   // Handle copy to clipboard
   const handleCopy = async (text: string, label: string) => {
@@ -24,6 +37,35 @@ export default function RequestDetail({ request, onClose, isInline = false }: Re
       setCopySuccess(label);
       setTimeout(() => setCopySuccess(null), 2000);
     }
+  };
+
+  // Handle note operations
+  const handleNoteSave = (note: string) => {
+    if (note) {
+      saveNote(stableRequestId, note);
+    } else {
+      deleteNote(stableRequestId);
+    }
+    setIsNoteModalOpen(false);
+    
+    // Notify parent component that note has changed
+    if (onNoteChange) {
+      onNoteChange();
+    }
+  };
+
+  const handleNoteDelete = () => {
+    deleteNote(stableRequestId);
+    setIsNoteModalOpen(false);
+    
+    // Notify parent component that note has changed
+    if (onNoteChange) {
+      onNoteChange();
+    }
+  };
+
+  const handleNoteCancel = () => {
+    setIsNoteModalOpen(false);
   };
 
   // Format body content based on content type
@@ -145,6 +187,58 @@ export default function RequestDetail({ request, onClose, isInline = false }: Re
                 </div>
               </div>
             )}
+
+            {/* Notes Section */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">Notes</h3>
+                <button
+                  onClick={() => setIsNoteModalOpen(true)}
+                  className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300"
+                >
+                  {currentNote ? 'Edit Note' : 'Add Note'}
+                </button>
+              </div>
+              
+              <div className="bg-gray-50 dark:bg-gray-700 rounded-md p-3 min-h-[3rem]">
+                {currentNote ? (
+                  <div className="space-y-2">
+                    <p className="text-sm text-gray-900 dark:text-white whitespace-pre-wrap">
+                      {currentNote}
+                    </p>
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      {(() => {
+                        try {
+                          const stored = localStorage.getItem('webhook-request-notes');
+                          if (stored) {
+                            const allNotes = JSON.parse(stored);
+                            const webhookNotes = allNotes[stableWebhookId] || {};
+                            const note = webhookNotes[stableRequestId];
+                            if (note) {
+                              const createdAt = new Date(note.createdAt);
+                              const updatedAt = new Date(note.updatedAt);
+                              const isUpdated = updatedAt.getTime() !== createdAt.getTime();
+                              return isUpdated 
+                                ? `Updated ${formatDateTime(updatedAt)}`
+                                : `Created ${formatDateTime(createdAt)}`;
+                            }
+                          }
+                        } catch (error) {
+                          console.error('Failed to load note timestamp:', error);
+                        }
+                        return '';
+                      })()}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      No notes yet. Click &quot;Add Note&quot; to add your thoughts.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -222,6 +316,8 @@ export default function RequestDetail({ request, onClose, isInline = false }: Re
             </div>
           </div>
         )}
+
+
       </div>
 
       {/* Footer - only show in modal mode */}
@@ -238,17 +334,37 @@ export default function RequestDetail({ request, onClose, isInline = false }: Re
   // Return inline or modal version based on isInline prop
   if (isInline) {
     return (
-      <div className="h-full flex flex-col bg-white dark:bg-gray-800">
-        <ContentComponent />
-      </div>
+      <>
+        <div className="h-full flex flex-col bg-white dark:bg-gray-800">
+          <ContentComponent />
+        </div>
+        
+        <NoteEditModal
+          isOpen={isNoteModalOpen}
+          note={currentNote}
+          onSave={handleNoteSave}
+          onCancel={handleNoteCancel}
+          onDelete={currentNote ? handleNoteDelete : undefined}
+        />
+      </>
     );
   }
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75 flex items-center justify-center p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-full overflow-hidden">
-        <ContentComponent />
+    <>
+      <div className="fixed inset-0 z-50 overflow-y-auto bg-gray-500 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75 flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-full overflow-hidden">
+          <ContentComponent />
+        </div>
       </div>
-    </div>
+      
+      <NoteEditModal
+        isOpen={isNoteModalOpen}
+        note={currentNote}
+        onSave={handleNoteSave}
+        onCancel={handleNoteCancel}
+        onDelete={currentNote ? handleNoteDelete : undefined}
+      />
+    </>
   );
 } 
